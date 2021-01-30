@@ -1,0 +1,11 @@
+cruft/
+DearPyGui/
+*.pyc*
+*.backup
+*.old
+*.bin
+*.debug
+*.json
+listing.txt
+ruler.txt
+
