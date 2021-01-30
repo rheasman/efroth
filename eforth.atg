@@ -1,0 +1,302 @@
+import array, collections
+import opcodes, ioconsts
+import struct, sys, json
+
+COMPILER EForth
+
+   Opcodes = opcodes.OpCodes()
+   IO = ioconsts.IOConsts()
+   WordCnt = 0
+   Words = collections.OrderedDict()
+   WordList = []
+   Labels = {}
+   Addr = 0
+   Fixups = collections.deque()
+   ROM = array.array("B")
+
+   # Struct to map ROM address ranges to symbols
+   DebugInfo = {}
+   AddrToSource = {}
+   T_OPCODE = 0
+   T_VAL = 1  
+
+   def emit(self, op, otype, comment=''):
+      print("%5d" % self.Addr, "%6s" % op, "  ", comment)
+      if op in self.Opcodes.OPCODESET:
+        self.ROM.append(self.Opcodes.OPCODENUM[op])
+      else:
+        self.ROM.append(op)
+      self.AddrToSource[int(self.Addr)] = (otype, self.token.pos, self.token.line, self.token.col, self.token.val, self.ROM[-1])
+      self.Addr += 1
+
+   def addWord(self, wordstr):
+      if wordstr not in self.Words:
+        self.Words[wordstr] = (self.WordCnt, self.Addr)
+        self.WordList.append(wordstr)
+        print(": %s" % wordstr)
+        self.WordCnt += 1
+        return wordstr
+      else:
+        self.SemErr(f"'{wordstr}' already defined: ")
+
+   def addLabel(self, label):
+     labelname = self.WordList[-1] + '::' + label
+     if labelname in self.Labels:
+       self.SemErr("Label already defined: " + labelname)
+     else:
+       self.Labels[labelname] = self.Addr
+       print("{%s}" % labelname)
+
+   def emitWord(self, wordstr, comment=''):
+      if wordstr in self.Opcodes.OPCODESET:
+        # It's an opcode
+        self.emit(wordstr, self.T_OPCODE, comment=comment)
+        return
+      
+      if wordstr in self.IO.IODICT:
+        # It's a defined IO constant
+        self.emitVal(self.IO.IOCONSTVAL[wordstr], comment="// %s: %d" % (wordstr, self.IO.IOCONSTVAL[wordstr]))
+        return
+
+      if wordstr in self.Words:
+        waddr = self.Words[wordstr][1]
+        self.emitVal(waddr, comment="// %5d %s" % (waddr, wordstr))
+        self.emit("CALL", self.T_OPCODE)
+        return
+
+      # Maybe it's a label
+      labelname = self.WordList[-1] + '::' + wordstr
+      if labelname in self.Labels:
+        laddr = self.Labels[labelname]
+        self.emitVal(laddr, comment = "// %s" % labelname)
+        return
+
+      SemErr(f"Didn't know what to do with: '{wordstr}'. It's not an opcode, word, known constant, or label." )  
+
+   def floatToBytes(self, floatval):
+     bitpattern = struct.pack("<f", float(floatval))
+     return struct.unpack("BBBB", bitpattern)
+
+   def emitFloat(self, floatval, comment=''):
+      floatval = float(floatval)
+      bytes = self.floatToBytes(floatval)
+      self.emit("IMMF", self.T_OPCODE);
+      self.emit(bytes[0], self.T_VAL, comment = "// %02X (float: %8f)" % (bytes[0], floatval))
+      self.emit(bytes[1], self.T_VAL, comment = "// %02X" % (bytes[1]))
+      self.emit(bytes[2], self.T_VAL, comment = "// %02X" % (bytes[2]))
+      self.emit(bytes[3], self.T_VAL, comment = "// %02X" % (bytes[3]))
+
+   def emitAddr(self, addr, addfixup=False, comment=''):
+      if (addr >=0) and (addr < 65536):
+        # 16 bit unsigned immediate
+        self.emit('IMMU', self.T_OPCODE)
+        if addfixup:
+          self.Fixups.append(self.Addr)
+        self.emit(addr & 0xFF, self.T_VAL, comment=comment)
+        self.emit((addr >> 8) & 0xFF, self.T_VAL, comment=comment)
+        return
+
+   def fixupAddr(self, addr):
+      d = list(self.AddrToSource[addr])
+      d[-1] = self.ROM[addr]
+      self.AddrToSource[addr] = tuple(d)
+
+   def doFixup(self, tofix, addr):
+      print(f"Fixup {tofix} to {addr}")
+
+      self.ROM[tofix] = addr & 0xFF
+      self.fixupAddr(tofix) 
+
+      self.ROM[tofix+1] = (addr >> 8) & 0xFF
+      self.fixupAddr(tofix) 
+
+
+   def emitVal(self, val, comment=''):
+      val = float(val)
+      intval = int(val)
+      fracval = val % 1
+
+      # It's a float
+      if (fracval > 0):
+        self.emitFloat(val)
+        return
+
+      if (intval >= 0) and (intval < 128):
+        # 7-bit immediate
+        # comment = "// %s %s" % (intval & 0x7F, comment)
+        self.emit(0x80 | intval, self.T_VAL, comment=comment)
+        return
+
+      if (intval >= -128) and (intval < 128):
+        # 8-bit immediate
+        self.emit('IMMS', self.T_OPCODE)
+        self.emit(intval, self.T_VAL, comment=comment)
+        return
+
+      offset = intval - self.Addr
+      if (offset >= -128) and (offset < 128):
+        # PC-relative number
+        self.emit('PCIMM')
+        self.emit(offset, self.T_VAL, comment=comment)
+        return
+
+      if (intval >=0) and (intval < 65536):
+        # 16 bit unsigned immediate
+        self.emit('IMMU', self.T_OPCODE)
+        self.emit(intval & 0xFF, self.T_VAL, comment=comment)
+        self.emit((intval >> 8) & 0xFF, self.T_VAL, comment=comment)
+        return
+
+      # Fine, no efficient way to encode the value
+      self.emitFloat(val, comment=comment)
+
+   def checkWords(self):
+     if "RunShot" not in self.Words:
+       self.SemErr( "The word 'RunShot' must be defined." )
+     if "Idle" not in self.Words:
+       self.SemErr( "The word 'Idle' must be defined." )
+     if "Halted" not in self.Words:
+       self.SemErr( "The word 'Halted' must be defined." )
+
+   def writeResults(self, outputfile):
+      print(self.AddrToSource)
+      #print(self.Words)
+      debuginfo = {
+        'AddrToSource' : self.AddrToSource,
+        'Words' : self.Words
+      }
+
+      #print("Object code:")
+      #bytes = [format(x, "02X") for x in self.ROM]
+      #print("  ", ",".join(bytes))
+      #print()
+      addr_shot = self.Words['RunShot'][1]
+      addr_idle = self.Words['Idle'][1]
+      addr_halted = self.Words['Halted'][1]
+      with open(outputfile+".bin", "wb") as f:
+        data = struct.pack(f"<4sHHHHHHH{len(self.ROM)}s", b"EFVM", 
+          0,             # Version
+          self.MaxVol,
+          self.MaxSec,
+          0x12,          # Start of ROM
+          addr_shot,
+          addr_idle,
+          addr_halted,
+          self.ROM.tobytes()
+        )
+        f.write(data)
+      
+      with open(outputfile+".debug", 'w') as outfile:
+        json.dump(debuginfo, outfile, indent=2)
+      
+   def startFor(self):
+      self.emitAddr(0, addfixup=True)
+      self.emitWord("FOR")
+
+   def endFor(self, addr):
+      self.emitWord("ENDFOR", comment=f"// FOR at {addr}.")
+      self.doFixup(self.Fixups.pop(), self.Addr)
+
+CHARACTERS
+  eol      = CHR(10) .
+  letter   = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_" .
+  digit    = "0123456789" .
+  noquote1 = ANY - "'" - eol .
+  noquote2 = ANY - '"' - eol .
+
+TOKENS
+  identifier = letter {letter | digit} .
+  number     = digit { digit} .
+  string     =  "'" noquote1 {noquote1} "'" | '"' noquote2 {noquote2} '"' .
+  float      = digit {digit} '.' digit {digit} .
+
+COMMENTS FROM "//" TO eol
+
+IGNORE  CHR(9) .. CHR(13)
+
+PRODUCTIONS
+  EForth               = "Program("
+                          string 
+                          "," 
+                          number                  (. self.MaxVol = int(self.token.val) .)
+                          "," 
+                          number                  (. self.MaxSec = int(self.token.val) .)
+                          ")" 
+                          Program                 (. self.checkWords() .)
+                          .                       
+  Program              = {
+                          Word
+                          }
+                          .
+
+  Word                 = SYNC
+                          AnnotatedWord
+                          |
+                          SimpleWord
+                          .
+  AnnotatedWord        = ":("
+                          { identifier } 
+                          WEAK "--" 
+                          { identifier } 
+                          ")" 
+                          RestOfWord 
+                          .
+  SimpleWord           = ":"
+                          RestOfWord
+                          .
+  RestOfWord           = WordDef<out name>     
+                          { CompoundStatement }
+                          EndOfWord
+                          .
+  CompoundStatement    = If | For | Repeat | While | Statement .               
+  If                   = "IF"                    (. self.emitAddr(0, addfixup=True)             .)
+                                                 (. self.emitWord("BZ")                         .)
+                          { CompoundStatement }
+                          { 
+                                                 (. tofix = self.Fixups.pop()                   .)
+                                                 (. self.emitAddr(0, addfixup=True)             .)
+                                                 (. self.emitWord("BRA")                        .)
+                          "ELSE"               
+                                                 (. self.doFixup(tofix, self.Addr);             .) 
+                          { CompoundStatement } }
+                          "ENDIF"                (. self.doFixup(self.Fixups.pop(), self.Addr)  .)
+                          .
+  For                  = "FOR"                   (. self.startFor(); addr = self.Addr-1         .)
+                          { CompoundStatement }
+                          "ENDFOR"               (. self.endFor(addr)                           .)
+                          .
+  Repeat               = "REPEAT"
+                          { CompoundStatement }
+                          "ENDREPEAT"
+                          .
+  While                = "WHILE"
+                          { CompoundStatement }
+                          "ENDWHILE"
+                          .
+  Statement            = WordName
+                        | Number 
+                        | Label             
+                        .
+  WordName             = identifier               (. self.emitWord(self.token.val)              .)
+                        .
+  WordDef<out name>    = identifier               (. name = self.addWord(self.token.val)        .)
+                         .
+  EndOfWord            = ";"                      (. self.emit(";", self.T_OPCODE) .)
+                        .
+  Label                = "{"
+                          identifier              (. self.addLabel(self.token.val)              .)
+                          "}"
+                          .
+  Number               = ( "+" IntOrFloat
+                         | "-" IntOrFloat
+                         | IntOrFloat
+                         )                        (. self.emitVal(self.token.val, comment="// %s" % self.token.val) .)
+                         .
+
+  IntOrFloat           = ( number
+                         | float
+                         )
+                         .
+
+
+END EForth.

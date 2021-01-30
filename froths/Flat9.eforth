@@ -1,0 +1,63 @@
+Program("Simple flat 9 bar 30s 92C shot", 500, 120)
+
+// Define word "SetPressure" to set the machine pressure
+: SetPressure  
+  IO_Pressure  // Put constant referring to Pressure on stack
+  IOW          // Write pressure to DE1
+  ;
+
+: SetTemp       // Define word "SetTemp" to set the machine shower head and group temperature
+  DUP           // Make a copy of the temperature
+  IO_ShowerTemp // Put constant referring to shower head temperature on stack
+  IOW           // Set target temp
+  IO_GroupMetalTemp  // Group head metal temperature
+  IOW           // Set target temp
+  ;
+
+: GetSeconds     // Get number of seconds elapsed since start of shot
+  IO_NumSeconds  // Put constant referring to number of seconds since start of shot on stack
+  IOR            // Read number of seconds
+  ;
+
+// Return 1 if we've reached the given number of seconds
+:(SLength -- ReachedBool) SecsReached
+  GetSeconds     // x secs   Get the number of seconds elapsed
+  SWAP           // secs x   Swap x and seconds
+  TGE            // (secs>=x) 1 if seconds > x, else 0
+  ;
+
+: EndTheShot // Tell the DE1 to stop
+  IO_EndShot
+  1
+  IOW
+  ;
+
+: Idle
+  ;
+: Halted
+;
+
+: Wait1Sec
+  10 0 1 FOR
+  6  0 1 FOR
+  WAIT
+  ENDFOR
+  1
+  IF
+  10
+  ELSE
+  11
+  ENDIF
+  ENDFOR
+;  
+
+// Define the actual shot
+: RunShot
+  92.5 SetTemp    // Set group temperature to 92 deg C
+  9 SetPressure   // Set the pressure target
+{NotDoneYet}      // Define a label
+  WAIT            // Wait until next AC Cycle
+  30 SecsReached  // Returns 1 if seconds reached, else zero
+  NotDoneYet BZ   // Jump to label if seconds not reached
+  EndTheShot      // Tell DE1 to stop
+  ;

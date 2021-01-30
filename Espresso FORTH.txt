@@ -1,0 +1,334 @@
+EFROTH
+
+This is a super simple stack machine that makes espresso. Optimized so that it can be
+implemented on the DE while using around 3 kB of RAM.
+
+This is similar in some ways to the FORTH language, but not the same, so I'm
+calling it a "FROTH" language. It makes espresso, hence "EFROTH".
+
+This is a tiny (and impure) sibling of a "real" FORTH. It is FORTH-like, but a
+lot less powerful than a real FORTH. On the other hand, it is probably easier
+for non-technical people to use. In a real FORTH the compiler is always
+running and advanced programmers add features to the language on the fly, so
+they can implement object orientation, multitasking, first-class datatypes,
+etc. as needed. In Espresso FORTH, the code is compiled once into a binary,
+and the binary is run on the DE1, but the compiler can do a little more
+up-front checking of the code as it sees it all at one.
+
+
+The CPU executes opcodes. Each opcode is 1 byte, except for:
+  PCIMMS   : 2 bytes. Opcode + a single signed byte
+  IMMS     : 2 bytes. Opcode + a single signed byte.
+  IMMU     : 3 bytes. Opcode + two bytes representing a 16-bit unsigned number
+  IMMF     : 5 bytes. Opcode + 32-bit float immediate to be loaded onto the stack.
+
+All internal arithmetic operations are on floats, and the stack holds floats
+only. If an integer value is needed, say for bitwise operations, the float is
+rounded to the nearest integer for the operation, then converted back to a
+float. Be aware that a 32-bit float can only represent 24 bits of an integer
+exactly, so keep bitwise integer operations at or below this number of bits if
+you don't want to think about possible issues.
+
+IMM is a virtual opcode in that any opcode with the top bit set is seen as a
+7-bit unsigned immediate value.
+
+How to read stack descriptions
+
+There are two halves to a stack description. The half before the "--" is the state of the stack before anything happens, and the half after the "--" is what the stack looks like when the operation is done.
+
+Get used to stack descriptions as they are a terse and powerful way to describe your code.
+
+So, 'x -- (x+1)' means that 'x' is on the stack before the operation, and
+'x+1' is on the stack after the operation.
+
+Basic opcodes:
+
+Opcode Name Stack Inputs "--" Stack Outputs
+-----------|--------------|---------------
+
+DUP   x -- x x         : Duplicate value on top of stack.
+DROP  x y -- x         : Discard TOS.
+OVER  x y -- x y x     : Duplicates the value at TOS-1. (Call twice to duplicate both values)
+SWAP  x y -- y x       : Swap x and y.
+COPY  x -- Stack[-x]   : Copy a value out of the stack at position TOS - x, to TOS. 0 is the item before x
+
++     x y -- (x+y)     : Add x and y.
+-     x y -- (x-y)     : Subtract y from x.
+*     x y -- (x*y)     : Multiply x and y.
+/     x y -- (x/y)     : Divide x by y.
+POW   x y -- pow(x,y)  : Take x to the power of y.
+NEG   x -- (-x)        : Invert sign of TOS.
+REC   x -- (1/x)       : Reciprocal of TOS.
+
+TZ    x -- 1|0         : Test Zero.  TOS = 1 if x  = 0, else 0
+TGT   x y -- (x>y)     : Test Greater Than.  TOS = 1 if x  > y, else 0
+TLT   x y -- (x<y)     : Test Less Than. TOS = 1 if x  < y, else 0
+TGE   x y -- (x>=y)    : Test Greater or Equal.  TOS = 1 if x >= y, else 0
+TLE   x y -- (x<=y)    : Test Less or Equal. TOS = 1 if x <= y, else 0
+
+TIN   x -- 1|0         : Test Invalid Number. TOS = 1 if x is NaN or Inf
+
+OR    x y -- (x  OR y) : Bitwise integer OR. Note that a FLOAT32 can only represent up to 24-bit integers exactly.
+AND   x y -- (x AND y) : Bitwise integer AND
+XOR   x y -- (x XOR y) : Bitwise integer XOR
+BINV  x   -- (~x)      : Bitwise Inverse. x is rounded to the nearest integer before the operation
+
+BNZ   x a --           : Branch to a if x != 0.
+BZ    x a --           : Branch to a if x == 0.
+BRA   a   --           : Branch to a.
+
+CALL  x                : Execute word x.
+;                      : Returns to calling word.
+WAIT                   : Sleep until the start of the next AC cycle.
+NOP                    : Does nothing.
+
+TOR   x  --            : Pop x and push to Call Stack
+FROMR -- x             : Pop from Call stack and push to ToS
+
+TOC   x  --            : Pop x and push to Control Stack
+FROMC -- x             : Pop from Control Stack and push to ToS
+COPYC -- x             : Push a copy of Control Stack ToS to ToS
+
+PCIMMS # -- x          : Push PC + # onto the stack.
+IMM    # -- x          : Push an immediate value from (0..127) onto the stack.
+IMMS   # -- x          : Push an immediate value from (-127 to 128) onto the stack.
+IMMU   # -- x          : Push an immediate value from (0 to 65536) onto the stack.
+IMMF   # -- x          : Push an immediate single-precision float (32-bit) onto the stack.
+
+STORE x y -- [y] = x   : Store x in slot y.
+FETCH y -- [y]         : Fetch a value from slot y, put it on the stack.
+
+PS    x y -- [y] = x   : Convert x to a single byte and store it at packet offset y.
+PF    y -- [y]         : Load a single byte from position y in the packet store.
+
+TXP     -- x           : Send a packet if possible. Return 1 if sent, 0 if dropped.
+RXP?    -- x           : Return 1 if a packet arrived, else zero. PacketData RX area is not modified until this is called.
+
+IOR   x -- IO[x]       : Read value of type x. (Reads state or sensor)
+IOW   x y --           : Put value x to control y. (Commands a state or target value)
+IORT  x -- LastIO[x]   : Read last value written to y. (Reads back what the machine actually accepted)
+
+Special words
+
+FOR is used to implement the beginning of a FOR loop. {} is used to represent the control stack
+
+FOR limit step index nextblockaddr -- {limit step index}
+
+FOR copies the limit, step, and start of the loop variables onto the control stack, if the start index is inside the range, otherwise it branches to nextblockaddr. Either way, it consumes nextblockaddr.
+
+INDEX copies the xth index out of the control stack, onto the ToS. 0 is the innermost loop index.
+
+INDEX  x {limt1 step1 index1 limit0 step0 index0} -- {limt1 step1 index1 limit0 step0 index0} index_x
+
+ENDFOR is used to implement the end of a FOR loop. It adds the step to the index and checks against the limit. If the index is out of range, it removes the control information from the stack and goes to the next instruction. Otherwise, it branches back to startaddr
+
+ENDFOR {limit step index startaddr} -- {limit step index+step startaddr} ; PC = startaddr
+ or
+ENDFOR {limit step index startaddr} -- {}; PC = PC+1
+
+Stacks
+
+There are two stacks in this virtual CPU. They are the Data Stack, the Control Stack. The control stack remembers return addresses when a word is called (this stack can also be called the "return stack" or the "call stack"). It also holds control variables for loops. The data stack is for everything else.
+
+
+Higher level language features
+
+As time goes on, I will add more of these.
+
+For now, I will implement:
+IF ... ENDIF 
+IF ... ELSE ... ENDIF
+FOR ... ENDFOR
+REPEAT ... ENDREPEAT
+WHILE ... ENDWHILE
+
+Program Executable Layout
+
+The general format for a program binary is:
+  Header
+  Vectors
+  Words (Program ROM)
+
+
+
+Header:
+A program starts with a max volume and a max number of seconds, for safety.
+The header also version numbers and other useful bits.
+
+Vectors: 
+This is a list of words that are called in special circumstances.
+
+I'm not sure what vectors make sense, and will add to them over time.
+
+For now, there three vectors:
+SHOT   : The word address called when a shot is started.
+IDLE   : The word address called when the machine is idle and needs to set a group idle  temperature and tank preheat temperature.
+HALT   : The word address called when something has forced a halt of the DOSHOT program. Should be used to do clean up if necessary.
+
+Words:
+A word is a list of opcodes that returns when done. Basically, a function that
+accepts a stack and that can modify it. You can have up to 256 words, and all
+words together should take less than 1024 bytes.
+
+The last word defined is executed to start the program.
+
+Program execution environment
+
+Every second, the machine will execute 1200 opcodes. 24 per AC
+cycle at 50Hz, and 20 per AC cycle at 60 Hz.
+
+While the program is running, this is the memory layout:
+
+Globals:
+
+The store and fetch commands can store or fetch values from 64 slots. These slots are
+the equivalent of global variables.
+
+PacketData:
+
+There is space for a packet of data to be sent, and a packet of data to be
+received. Each packet is exactly 16 bytes long. All bytes are sent or
+received.
+
+Thus, there are two 16 byte areas. One for TX and one for RX. The PS opcode is
+used to write ('store') to the TX packet area, and the PF opcode is used to read
+('fetch') from the RX packet area. The RX packet area is read only, and the TX
+packet area is write only.
+
+The TXP opcode sends the contents of the TX packet area. 
+
+The RXP? opcode checks to see if there is a packet available, and copies it
+into the RX area if so. It returns 1 if there is a new packet, else zero.
+
+The IO Region:
+
+This is the region used to control and respond to the espresso machine.
+
+Doing a IOR reads a sensor value, or the current state of the machine.
+IOW commands a state or asks that a sensor value be targeted.
+
+For example, writing "10" to "Pressure" sets 10 as a target pressure to reach.
+An IOR of "Pressure" will return the current pressure, and IORT will return "10"
+telling you what it thinks the target is that you requested. Writing to slots
+that make no sense will halt your program.
+
+0 : Pressure (IO_Pressure)
+1 : Shower head temperature
+2 : Group head temperature
+3 : Group inlet temperature
+4 : Estimated flow
+5 : Estimated volume since start of shot
+6 : Number of seconds since start of shot
+7 : Number of seconds since start of frame
+8 : End shot. (Write 1 to this to end a shot)
+
+Source code format.
+
+Your job as the programmer is to define the words that will be executed.
+
+Each program will start with "Program(Name, MaxVol, MaxSecs)".
+
+There are a few reserved words. All opcodes, and ":" and ";".
+
+":" means define a word.
+";" means compile a word and add it to the dictionary.
+";(" is the same as ";", but used to add extra information for debugging.
+"{Label}" means define a point that can be branched to.
+
+Any number will be either encoded using an SBYTE or using the constants area.
+
+There are convenience words defined for IO slots. Each will start with "IO_".
+
+Comments start with "//". The compiler ignores them.
+
+Here is an example:
+
+Program("Simple flat 9 bar 30s 92.5C shot", 500, 120)
+
+: SetPressure  // Define word "SetPressure" to set the machine pressure
+  IO_Pressure  // Put constant referring to Pressure on stack
+  IOW          // Write pressure to DE1
+  ;
+
+: SetTemp       // Define word "SetTemp" to set the machine shower head and group temperature
+  DUP           // Make a copy of the temperature
+  IO_ShowerTemp // Put constant referring to shower head temperature on stack
+  IOW           // Set target temp
+  IO_GroupTemp  // Group head metal temperature
+  IOW           // Set target temp
+  ;
+
+: GetSeconds     // Get number of seconds elapsed since start of shot
+  IO_NumSeconds  // Put constant referring to number of seconds since start of shot on stack
+  IOR            // Read number of seconds
+  ; 
+
+: SecsReached    // Return 1 if we've reached the given number of seconds
+  GetSeconds     // x secs   Get the number of seconds elapsed
+  SWAP           // secs x   Swap x and seconds
+  TGE            // (secs>=x) 1 if seconds > x, else 0
+  ; // Return 1 if we've reached the end of the shot
+
+: EndTheShot // Tell the DE1 to stop
+  IO_EndShot
+  1
+  IOW
+  ;
+
+// Define the actual shot
+: Shot
+  92.5 SetTemp    // Set group temperature to 92.5 deg C
+  9 SetPressure   // Set the pressure target
+{NotDoneYet}      // Define a label
+  WAIT            // Wait until next AC Cycle
+  30 SecsReached  // Returns 1 if seconds reached, else zero
+  NotDoneYet BZ   // Jump to label if seconds not reached
+  EndTheShot      // Tell DE1 to stop
+
+
+Note that this could have been written as follows, with no change in meaning:
+  
+Program("Simple flat 9 bar 30s 92C shot", 500, 120)
+
+: SetPressure IO_Pressure IOW ;
+: SetTemp DUP IO_ShowerTemp IOW IO_GroupTemp IOW ;
+: GetSeconds IO_NumSeconds IOR ; 
+: SecsReached GetSeconds SWAP TGE ;
+: EndTheShot IO_EndShot 1 IOW ;
+
+// Define the actual shot
+: Shot
+  92.5 SetTemp     // Set group temperature to 92.5 deg C
+  9 SetPressure    // Set the pressure target
+{NotDoneYet}       // Define a label
+  WAIT             // Wait until next AC Cycle
+  30 SecsReached   // Returns 1 if seconds reached, else zero
+  BZ NotDoneYet    // Jump to label if seconds not reached
+  EndTheShot       // Tell DE1 to stop
+
+Adding Features for Debugging
+
+The extended debugging format for a word will look like this:
+
+:(SLength -- ReachedBool) SecsReached
+
+Everything in the brackets is used to create debug information for the
+debugger. In the debugger, the different stack positions will use the names
+given, during single step debugging. The compiled code will not use the extra
+information.
+
+
+Binary Format
+
+The binary format will be as follows. All numbers are little endian.
+
+0000 - 0003 : 'EFVM'
+0004 - 0005 : Version. U16. 0 for this layout
+0006 - 0007 : MaxVol (ml),  1 - 1024
+0008 - 0009 : MaxSec ( s),  1 - 600
+000A - 000B : ROM Start. The start of the program ROM, as a byte offset into the file.
+000C - 000D : Vector: SHOT : Start address for execution of a shot. 0 means not used.
+000E - 000F : Vector: IDLE : Called to set group and preheat temps. 0 means not used.
+0010 - 0011 : Vector: HALT : Called to cleanup a shot if an error occurs. 0 means not used.
+xxxx - xxxx : Length of program ROM in bytes.
+000E - xxxx : Program ROM
