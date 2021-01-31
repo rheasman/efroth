@@ -434,7 +434,7 @@ class Parser( object ):
             self.Get( )
          return self.StartOf( syFol )
 
-   def EForth( self ):
+   def EFroth( self ):
       self.Expect(5)
       self.Expect(3)
       self.Expect(6)
@@ -600,7 +600,7 @@ class Parser( object ):
       self.la = Token( )
       self.la.val = ''
       self.Get( )
-      self.EForth()
+      self.EFroth()
       self.Expect(0)
 
 

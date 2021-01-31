@@ -2,7 +2,7 @@ import array, collections
 import opcodes, ioconsts
 import struct, sys, json
 
-COMPILER EForth
+COMPILER EFroth
 
    Opcodes = opcodes.OpCodes()
    IO = ioconsts.IOConsts()
@@ -215,7 +215,7 @@ COMMENTS FROM "//" TO eol
 IGNORE  CHR(9) .. CHR(13)
 
 PRODUCTIONS
-  EForth               = "Program("
+  EFroth               = "Program("
                           string 
                           "," 
                           number                  (. self.MaxVol = int(self.token.val) .)
@@ -299,4 +299,4 @@ PRODUCTIONS
                          .
 
 
-END EForth.
+END EFroth.
