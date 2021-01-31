@@ -170,7 +170,7 @@ def add_editor():
     del Windows["Source"]
     delete_item("Source")
 
-  Windows["Source"] = Editor("Flat9.eforth")
+  Windows["Source"] = Editor("froths/Flat9.eforth")
 
 def cb_add_controls(sender, data):
   add_controls()
