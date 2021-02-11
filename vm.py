@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-from collections import deque
+from collections import deque, namedtuple
 from opcodes import OpCodes
 import array, math, struct, sys
+from disasm import DebugDis
+import ioconsts
+
+SEntry = namedtuple("SEntry", "float, symbol")
 
 def toF32(x):
-  print(x)
+  #print(x)
   return struct.unpack('f', struct.pack('f', float(x)))[0]
 
 class F32Stack:
   """
   A stack implemented on top of a deque, so we can
-  catch under and overflow cleanly
+  catch under and overflow cleanly.
   """
   def __init__(self, size, callbackover, callbackunder):
     self.Stack = deque()
@@ -43,7 +47,7 @@ class F32Stack:
     if len(self.Stack) >= self.Size:
       self.CallbackO()
 
-    x = toF32(x)
+    x._replace(float=toF32(x.float))
     self.Stack.append(x) # Append to right of stack
     self.Changed = True
 
@@ -52,7 +56,7 @@ class F32Stack:
       self.CallbackU()
 
     self.Changed = True
-    return self.Stack.pop(x) # Pop off right of stack
+    return self.Stack.pop() # Pop off right of stack
 
   def pop2(self):
     b = self.pop()
@@ -60,62 +64,300 @@ class F32Stack:
     self.Changed = True
     return (a, b)
 
+class DE1Sim:
+  """
+  Simulates the rest of the machine outside the CPU
+  """
+  def __init__(self, systime):
+    self.SysTime = systime
+    self.IOConsts = ioconsts.IOConsts()
+
+    self.Pressure = 0.0
+    self.Flow = 0.0
+    self.GroupMetalTemp  = 0.0
+    self.ShowerTemp = 0.0
+
+    self.PressureTarget = 0.0
+    self.FlowTarget = None
+    self.GroupMetalTempTarget = 0.0
+    self.ShowerTempTarget = 0.0
+
+  def startShot(self):
+    self.NumMS = 0
+
+  def step(self):
+    if self.PressureTarget != None:
+      self.Pressure = 0.99*self.Pressure + 0.01*self.PressureTarget
+
+    if self.FlowTarget != None:
+      self.Flow = 0.99*self.Flow + 0.01*self.FlowTarget
+
+    self.ShowerTemp = 0.99*self.ShowerTemp + 0.01*self.ShowerTempTarget
+
+  def clamp(self, x, minx, maxx):
+    if x < minx:
+      x = minx
+
+    if x > maxx:
+      x = maxx
+
+    return x
+
+  def ioWrite(self, x, y):
+    name = self.IOConsts.IOCONSTNAME[int(round(y.float))]
+    print(f"ioWrite of {x} to {name}")
+    permissions = self.IOConsts.IODICT[name]
+    if 'W' in permissions:
+      getattr(self, f"{name}W")(x.float)
+
+  def ioRead(self, y):
+    name = self.IOConsts.IOCONSTNAME[int(round(y.float))]
+    print("ioRead from ", name, end='')
+    permissions = self.IOConsts.IODICT[name]
+    if 'R' in permissions:
+      res = getattr(self, f"{name}R")()
+      print(": ", res)
+      return res
+
+  def IO_PressureW(self, x):
+    #("IO_Pressure"         , "RWT"),  # R = Readable. W = Writeable. T = Can read back
+    self.FlowTarget = None
+    x = self.clamp(x, 0.0, 12.0)
+
+    self.PressureTarget = x
+
+  def IO_PressureR(self):
+    return SEntry(self.Pressure, "Pressure")
+
+  def IO_PressureT(self):
+    if self.PressureTarget == None:
+      return SEntry(-1, "PressureTarget")
+
+    return SEntry(self.PressureTarget, "PressureTarget")
+
+  def IO_ShowerTempW(self, x):
+    x = self.clamp(x, 0.20, 105.0)
+    self.ShowerTempTarget = x
+
+  def IO_ShowerTempR(self):
+    return SEntry(self.ShowerTemp, "ShowerTemp")
+
+  def IO_ShowerTempT(self):
+    return SEntry(self.ShowerTempTarget, "ShowerTempTarget")
+
+  def IO_GroupMetalTempW(self, x):
+    x = self.clamp(x, 0.20, 105.0)
+    self.GroupMetalTempTarget = x
+
+  def IO_GroupMetalTempR(self):
+    return SEntry(self.GroupMetalTemp, "GroupMetalTemp")
+
+  def IO_GroupMetalTempT(self):
+    return SEntry(self.GroupMetalTempTarget, "GroupMetalTempTarget")
+
+  def IO_NumSecondsR(self):
+    return SEntry(self.SysTime.getS(), "NumSeconds")
+
+
+
+
+
+
+  """  
+    ("IO_Flow"             , "RWT"),
+    ("IO_ShowerTemp"       , "RWT"),
+    ("IO_GroupMetalTemp"   , "RWT"),
+    ("IO_GroupInletTemp"   , "RWT"),
+    ("IO_Vol"              , "R"),
+    ("IO_NumSeconds"       , "R"),
+    ("IO_EndShot"          , "W")
+  """
+
+class VMCPUException(Exception):
+  pass
+
+class VMCPUInfo(VMCPUException):
+  pass
+
+class VMCPUBreakpoint(VMCPUInfo):
+  pass
+
+class VMCPUStopped(VMCPUInfo):
+  """
+  Tell the caller that the CPU has executed the STOP opcode
+  """
+  pass
+
+class StackError(VMCPUException):
+  pass
+
+class StackUnderflow(StackError):
+  pass
+
+class StackOverflow(StackError):
+  pass
+
 class CPU:
-  def __init__(self):
+  def __init__(self, systime):
+    self.SysTime = systime
+    self.Sim = DE1Sim(systime)
     self.ROM = array.array('B', [0]*1024)
-    self.CallStack = F32Stack(64, self.stackErrorCB, self.stackErrorCB)
-    self.Stack = F32Stack(64, self.stackErrorCB, self.stackErrorCB)
-    self.ControlStack = F32Stack(64, self.stackErrorCB, self.stackErrorCB)
+    self.CallStack = F32Stack(64, self.stackErrorOCB, self.stackErrorUCB)
+    self.Stack = F32Stack(64, self.stackErrorOCB, self.stackErrorUCB)
+    self.ControlStack = F32Stack(64, self.stackErrorOCB, self.stackErrorUCB)
     self.PC = 0
+    self.Cycles = 0
     self.Globals = array.array('f', [0.0]*64)
     self.RXPacket = array.array('B', [0]*16)
     self.TXPacket = array.array('B', [0]*16)
     self.Opcodes = OpCodes()
+    self.OpMap = {
+      '+' : 'PLUS',
+      '-' : 'MINUS',
+      '*' : 'TIMES',
+      '/' : 'DIV',
+      ';' : 'RET'
+    }
+    self.BreakPoints = set()
+    self.Stopped = False
 
-  def loadRaw(self, filename):
-    f = open(filename, 'rb')
-    rom = f.read()
-    f.close()
-    for i, x in enumerate(rom):
-      self.ROM[i] = x
+  # def loadRaw(self, filename):
+  #   f = open(filename, 'rb')
+  #   rom = f.read()
+  #   f.close()
+  #   for i, x in enumerate(rom):
+  #     self.ROM[i] = x
 
-    self.PC = 21
+  #   self.PC = 21
 
-  def stackErrorCB(self):
-    print("Stack error")
-    asdf
-    sys.exit(1)
+  def reset(self):
+    self.PC = self.D.Words["RunShot"][1]
+    self.Cycles = 0
+    self.Stopped = 0
 
-  def step(self):
+  def moveToWord(self, word):
+    if word in self.D.Words:
+      self.PC = self.D.Words[word][1]
+
+  def loadDebug(self, filename):
+    self.D = DebugDis(filename)
+    self.ROM = array.array('B', self.D.MemBytes)
+    self.reset()
+
+  def toggleBP(self, addr):
+    if addr in self.BreakPoints:
+      self.BreakPoints.remove(addr)
+    else:
+      self.BreakPoints.add(addr)
+
+  def isBP(self, addr):
+    return addr in self.BreakPoints
+
+  def stackErrorUCB(self):
+    raise StackUnderflow('Stack underflow')
+
+  def stackErrorOCB(self):
+    raise StackOverflow('Stack overflow')
+
+  def getOpcodeName(self, opcode):
+    if opcode & 0x80:
+      return "IMM"
+
+    return self.Opcodes.OPCODENAME[opcode]
+
+  def getCurrentOpcodeName(self):
+    opcode = self.ROM[self.PC]
+    return self.getOpcodeName(opcode)
+
+  def isCurrentOpCall(self):
+    opcode = self.ROM[self.PC]
+    if opcode & 0x80:
+      return False
+
+    opname = self.Opcodes.OPCODENAME[opcode]
+    if opname == "CALL":
+      return True
+
+    return False
+
+  def nextOpcodeAddr(self, addr):
+    # Return the address after the current opcode
+    return addr + self.Opcodes.opcodeLen(addr)
+
+  def runUntilBreakpoint(self):
+    while self.PC not in self.BreakPoints:
+      self.step()
+
+  def step(self, ignorebp=None):
+    if self.Stopped:
+      raise VMCPUStopped('CPU is stopped')
+
+    if self.PC in self.BreakPoints:
+      if self.PC != ignorebp:
+        raise VMCPUBreakpoint('Breakpoint hit')
+
+    self.Cycles += 1
+    self.SysTime.addTicks(1)  # 1 tick per opcode, for now
     opsize = 1
     opcode = self.ROM[self.PC]
-    if (opcode & 0x80):
-      # It's an immediate unsigned 7 bit literal
-      self.IMM(opcode & 0x7F)
+    if self.Opcodes.isImmediate(opcode):
+      symbol = self.D.getInfo(self.PC).tval
+      if (opcode & 0x80):
+        # It's an immediate unsigned 7 bit literal
+        self.IMM(opcode & 0x7F, symbol = symbol)
+      else:
+        opname = self.Opcodes.OPCODENAME[opcode]
+        if opname in self.Opcodes.LONGEROPCODES:
+          # One of the immediate instructions
+          opsize = self.Opcodes.LONGEROPCODES[opname]
+          daddr = self.PC+1
+          if opname == 'PCIMMS':
+            val = self.ROM[daddr] + self.PC - 128
+            if val < 0:
+              symbol = ' '+symbol
+            self.IMM(val, symbol = symbol)
+
+          if opname == "IMMS":
+            val = self.ROM[daddr] - 128
+            if val < 0:
+              symbol = ' '+symbol
+            self.IMM(val, symbol = symbol)
+
+          if opname == "IMMU":
+            val = self.ROM[daddr] | (self.ROM[daddr+1] << 8)
+            self.IMM(val, symbol = symbol)
+
+          if opname == "IMMF":
+            val = struct.unpack("<f", self.ROM[daddr:daddr+4])[0]
+            if val < 0:
+              symbol = ' '+symbol
+            self.IMM(val, symbol = symbol)
+
+      self.PC += opsize
+
     else:
+      # Not immediate
+      self.PC += 1
+
       opname = self.Opcodes.OPCODENAME[opcode]
-      if opname in self.Opcodes.LONGEROPCODES:
-        # One of the immediate instructions
-        opsize = self.Opcodes.LONGEROPCODES[opname]
-        daddr = self.PC+1
-        if opname == 'PCIMMS':
-          val = self.ROM[daddr] + self.PC - 128
-          self.IMM(val)
+      print(opname)
+      if opname in self.OpMap:
+        # Remap to a method name
+        opname = self.OpMap[opname]
 
-        if opname == "IMMS":
-          val = self.ROM[daddr] - 128
-          self.IMM(val)
+      getattr(self, opname)() # Call the method with this name
 
-        if opname == "IMMU":
-          val = self.ROM[daddr] | (self.ROM[daddr+1] << 8)
-          self.IMM(val)
+    if self.D.tagged(self.PC):
+      tos = self.Stack.pop()
+      tos = tos._replace(symbol=self.D.getTag(self.PC))
+      self.Stack.push(tos)
 
-        if opname == "IMMF":
-          val = struct.unpack("<f", self.ROM[daddr:daddr+4])[0]
-          self.IMM(val)
 
-    self.PC += opsize
+  def ioWrite(self, x, y):
+    self.Sim.ioWrite(x, y)
 
+  def ioRead(self, x):
+    self.Stack.push(self.Sim.ioRead(x))
 
   """
   OPCODES START HERE
@@ -123,7 +365,9 @@ class CPU:
 
   def DUP(self):
     # DUP   x -- x x
-    self.Stack.push(self.Stack.pop())
+    x = self.Stack.pop()
+    self.Stack.push(x)
+    self.Stack.push(x)
 
   def DROP(self):
     # DROP  x y -- x
@@ -147,158 +391,175 @@ class CPU:
   def PLUS(self):
     # +     x y -- (x+y)
     x, y = self.Stack.pop2()
-    self.Stack.push(x+y)
+    res = SEntry(x.float+y.float, f"{x.symbol}+{y.symbol}")
+    self.Stack.push(res)
 
   def MINUS(self):
     # -     x y -- (x-y)
     x, y = self.Stack.pop2()
-    self.Stack.push(x-y)
+    res = SEntry(x.float-y.float, f"{x.symbol}-{y.symbol}")
+    self.Stack.push(res)
 
   def TIMES(self):
     # *     x y -- (x*y)
     x, y = self.Stack.pop2()
-    self.Stack.push(x*y)    
+    res = SEntry(x.float*y.float, f"({x.symbol})*({y.symbol})")
+    self.Stack.push(res)    
 
   def DIV(self):
     # /     x y -- (x/y)
     x, y = self.Stack.pop2()
-    self.Stack.push(x/y)
+    res = SEntry(x.float/y.float, f"({x.symbol})/({y.symbol})")
+    self.Stack.push(res)
 
   def POW(self):
     # POW   x y -- pow(x,y)
     x, y = self.Stack.pop2()
-    self.Stack.push(math.pow(x, y))
+    res = SEntry(math.pow(x.float, y.float), f"POW({x.symbol}, {y.symbol})")
+    self.Stack.push(res)
 
   def NEG(self):
     # NEG   x -- (-x)        : Invert sign of TOS.
     x = self.Stack.pop()
-    self.Stack.push(-x)
+    res = SEntry(-x.float, f"-{x.symbol}")
+    self.Stack.push(res)
 
   def REC(self):
     # REC   x -- (1/x)       : Reciprocal of TOS.
     x = self.Stack.pop()
-    self.Stack.push(1.0/x)
+    res = SEntry(1.0/x.float, f"(1.0/{x.symbol})")
+    self.Stack.push(res)
 
   def TZ(self):
     # TZ    x -- 1|0         : Test Zero.  TOS = 1 if x  = 0, else 0
     x = self.Stack.pop()
-    if x == 0:
-      self.Stack.push(1.0)
+    if x.float == 0:
+      self.Stack.push(SEntry(1.0, f'({x.symbol}==0)'))
     else:
-      self.Stack.push(0.0)
+      self.Stack.push(SEntry(0.0, f'({x.symbol}==0)'))
 
   def TGT(self):
     # TGT   x y -- (x>y)     : Test Greater Than.  TOS = 1 if x  > y, else 0
     x, y = self.Stack.pop2()
-    if x > y:
-      self.Stack.push(1.0)
+    if x.float > y.float:
+      self.Stack.push(SEntry(1.0, f"({x.symbol}>{y.symbol})"))
     else:
-      self.Stack.push(0.0)
+      self.Stack.push(SEntry(0.0, f"({x.symbol}>{y.symbol})"))
 
   def TLT(self):
     # TLT   x y -- (x<y)     : Test Less Than. TOS = 1 if x  < y, else 0
     x, y = self.Stack.pop2()
-    if x < y:
-      self.Stack.push(1.0)
+    if x.float < y.float:
+      self.Stack.push(SEntry(1.0, f"({x.symbol}<{y.symbol})"))
     else:
-      self.Stack.push(0.0)
+      self.Stack.push(SEntry(0.0, f"({x.symbol}<{y.symbol})"))
 
   def TGE(self):
     # TGE   x y -- (x>=y)    : Test Greater or Equal.  TOS = 1 if x >= y, else 0
     x, y = self.Stack.pop2()
-    if x >= y:
-      self.Stack.push(1.0)
+    if x.float >= y.float:
+      self.Stack.push(SEntry(1.0, f"({x.symbol}>={y.symbol})"))
     else:
-      self.Stack.push(0.0)
+      self.Stack.push(SEntry(0.0, f"({x.symbol}>={y.symbol})"))
 
   def TLE(self):
     # TLE   x y -- (x<=y)    : Test Less or Equal. TOS = 1 if x <= y, else 0
     x, y = self.Stack.pop2()
-    if x <= y:
-      self.Stack.push(1.0)
+    if x.float <= y.float:
+      self.Stack.push(SEntry(1.0, f"({x.symbol}<={y.symbol})"))
     else:
-      self.Stack.push(0.0)
+      self.Stack.push(SEntry(0.0, f"({x.symbol}<={y.symbol})"))
 
   def TIN(self):
     # TIN   x -- 1|0         : Test Invalid Number. TOS = 1 if x is NaN or Inf
     x = self.Stack.pop()
-    if math.isnan(x) or math.isinf(x):
-      self.Stack.push(1.0)
+    if math.isnan(x.float) or math.isinf(x.float):
+      self.Stack.push(SEntry(1.0, f"TIN({x.symbol})"))
     else:
-      self.Stack.push(0.0)
+      self.Stack.push(SEntry(0.0, f"TIN({x.symbol})"))
 
   def OR(self):
     # OR    x y -- (x OR y) : Bitwise integer OR
     x, y = self.Stack.pop2()
-    x = int(round(x))
-    y = int(round(y))
-    self.Stack.push(x | y) # Push converts everything to a float32
+    xi = int(round(x.float))
+    yi = int(round(y.float))
+    res = SEntry(xi|yi, f"({x.symbol}|{y.symbol})")
+    self.Stack.push(res) # Push converts everything to a float32
 
   def AND(self):
     # AND   x y -- (x AND y) : Bitwise integer AND
     x, y = self.Stack.pop2()
-    x = int(round(x))
-    y = int(round(y))
-    self.Stack.push(x & y) # Push converts everything to a float32
+    xi = int(round(x.float))
+    yi = int(round(y.float))
+    res = SEntry(xi & yi, f"({x.symbol}&{y.symbol})")
+    self.Stack.push(res) # Push converts everything to a float32
 
   def XOR(self):
     # XOR   x y -- (x XOR y) : Bitwise integer XOR
     x, y = self.Stack.pop2()
-    x = int(round(x))
-    y = int(round(y))
-    self.Stack.push(x ^ y) # Push converts everything to a float32
+    xi = int(round(x.float))
+    yi = int(round(y.float))
+    res = SEntry(xi ^ yi, f"({x.symbol}^{y.symbol})")
+    self.Stack.push(res) # Push converts everything to a float32
 
   def BINV(self):
     # BINV  x   -- (~x)      : Bitwise Inverse. Treats x as an integer
     x = self.Stack.pop()
-    x = int(round(x))
+    xi = int(round(x.float))
+    res = SEntry(~xi, f"~{x.symbol}")
     self.Stack.push(~x)
 
   def BNZ(self):
     # BNZ   x a --           : Branch to a if x != 0. 
     x, a = self.Stack.pop2()
-    if x != 0:
-      self.PC = int(round(a))
+    if x.float != 0:
+      self.PC = int(round(a.float))
 
   def BZ(self):
     # BZ    x a --           : Branch to a if x == 0.
     x, a = self.Stack.pop2()
-    if x == 0:
-      self.PC = int(round(a))
+    if x.float == 0:
+      self.PC = int(round(a.float))
 
   def BRA(self):
     # BRA   a   --           : Branch to a.
     a = self.Stack.pop()
-    self.PC = int(round(a))
+    self.PC = int(round(a.float))
 
   def CALL(self):
     # CALL  x                : Execute word x.
-    self.CallStack.push(self.PC)  # PC should already be pointing to the next instruction
-    self.PC = int(round(a))
+    self.CallStack.push(SEntry(self.PC, f"{self.PC}"))  # PC should already be pointing to the next instruction
+    a = self.Stack.pop()
+    self.PC = int(round(a.float))
 
   def RET(self):
     # ;                      : Returns to calling word.
     a = self.CallStack.pop()
-    self.PC = int(round(a))
+    self.PC = int(round(a.float))
 
   def WAIT(self):
     # WAIT                   : Sleep until the start of the next AC cycle.
-    pass
+    self.SysTime.waitTilNextACZero()
 
   def NOP(self):
     # NOP                    : Does nothing.
     pass
 
-  def PCIMMS(self, imm):
+  def PCIMMS(self, imm, symbol=''):
     # PCIMMS # -- x          : Push PC + # onto the stack.
     x = self.PC + imm - 1    # PC has been pre-incremented, so subract 1
-    self.Stack.push(x)
+    if symbol=='':
+      symbol = f"{x.float}"
+    self.Stack.push(SEntry(x, symbol))
 
-  def IMM(self, imm):
+  def IMM(self, imm, symbol=''):
+    if symbol=='':
+      symbol = f"{imm.float}"
+    print(imm)
     # IMM    # -- x          : Push an immediate value from (0..127) onto the stack.
     # IMMS   # -- x          : Push an immediate value from (-127 to 128) onto the stack.
     # IMMF   # -- x          : Push an immediate single-precision float (32-bit) onto the stack.
-    self.Stack.push(imm)
+    self.Stack.push(SEntry(imm, symbol))
 
   def STORE(self):
     # STORE x y -- [y] = x   : Store x in slot y.
@@ -313,20 +574,28 @@ class CPU:
   def PS(self):
     # PS    x y -- [y] = x   : Convert x to a single byte and store it at packet offset y.
     x, y = self.Stack.pop2()
-    self.TXPacket[y] = int(round(y))
+    xi = int(round(x))
+    yi = int(round(y))
+    res = SEntry(xi, f"{x.symbol}")
+    self.TXPacket[y] = res
 
   def PF(self):
     # PF    y -- [y]         : Load a single byte from position y in the packet store.
     y = self.Stack.pop()
-    self.Stack.push(self.RXPacket[y])
+    yi = int(round(y))
+    xi = self.RXPacket[y]
+    res = SEntry(xi, f"{xi}")    
+    self.Stack.push(res)
 
   def TXP(self):
     # TXP     -- x           : Send a packet if possible. Return 1 if sent, 0 if dropped.
-    self.Stack.push(1.0)
+    res = SEntry(1, "SENT")
+    self.Stack.push(res)
 
   def RXP(self):
     # RXP?    -- x           : Return 1 if a packet arrived, else zero. PacketData RX area is not modified until this is called.
-    self.Stack.push(1.0)    
+    res = SEntry(1, "RECEIVED")
+    self.Stack.push(res)    
 
   def IOR(self):
     # IOR   x -- v           : Read value of type x. (Reads state or sensor)
@@ -340,6 +609,101 @@ class CPU:
 
   def IORT(self):
     # IORT  y -- x         : Read last value written to y. (Reads back a command)
-    x = self.Stack.pop()
-    self.Stack.push(self.ioReadTarget(x))
+    y = self.Stack.pop()
+    self.ioReadTarget(y)
 
+  def STOP(self):
+    # STOP --              : STOPS CPU execution
+    self.Stopped = True
+    raise VMCPUStopped('STOP Executed')
+
+  def FOR(self):
+    """
+      FOR is used to implement the beginning of a FOR loop. {} is used to
+      represent the control stack
+
+      FOR limit step index nextblockaddr -- {limit step index startaddr}      // Index is inside limits
+       or
+      FOR limit step index nextblockaddr -- ; PC = nextblockaddr    // Index is outside limits
+
+      FOR copies the limit, step, and start of the loop variables onto the
+      control stack, if the start index is inside the range, otherwise it
+      branches to nextblockaddr. Either way, it consumes nextblockaddr.    
+
+    """
+    index, nextblockaddr = self.Stack.pop2()
+    limit, step = self.Stack.pop2()
+    nbai = int(round(nextblockaddr.float))
+    nextblockaddr._replace(float=nbai)
+
+    #print(limit, step, index, nextblockaddr)
+
+    enterloop = True
+    if step.float == 0.0:
+      enterloop = False
+
+    if step.float > 0.0:
+      # Step is positive, index needs to be < limit
+      if index.float >= limit.float:
+        enterloop = False
+
+    if step.float < 0.0:
+      # Step is negative. Index needs to be > limit
+      if index.float <= limit.float:
+        enterloop = False
+
+    if enterloop:
+      self.CallStack.push(limit)
+      self.CallStack.push(step)
+      self.CallStack.push(index)
+      self.CallStack.push(SEntry(self.PC, f"{self.PC}"))
+    else:
+      # Just branch to end of loop
+      self.PC = nextblockaddr.float
+
+  def ENDFOR(self):
+    """
+      ENDFOR is used to implement the end of a FOR loop. It adds the step to the
+      index and checks against the limit. If the index is out of range, it removes
+      the control information from the stack and goes to the next instruction.
+      Otherwise, it branches back to startaddr
+
+      ENDFOR {limit step index startaddr} -- {limit step index+step startaddr} ; PC = startaddr
+       or
+      ENDFOR {limit step index startaddr} -- {}; PC = PC+1
+    """
+    index, startaddr = self.CallStack.pop2()
+    limit, step = self.CallStack.pop2()
+    sai = int(round(startaddr.float))
+    startaddr._replace(float=sai)
+
+    i = index.float + step.float
+    index = SEntry(i, f"{i}")
+    leave = False
+    if step.float > 0:
+      if index.float >= limit.float:
+        leave = True
+    else:
+      if index.float <= limit.float:
+        leave = True
+
+    if leave:
+      # Do nothing, the next instruction will naturally execute
+      pass
+    else:
+      self.CallStack.push(limit)
+      self.CallStack.push(step)
+      self.CallStack.push(index)
+      self.CallStack.push(startaddr)
+      self.PC = startaddr.float
+
+  def INDEX(self):
+    """
+    Puts a FOR loop index on the ToS.
+    INDEX x -- (Loop x's index)
+    """
+    loop = self.Stack.pop()
+    posi = int(round(loop.float))
+    posi = posi*4 + 1
+    index = self.CallStack.read(posi)
+    self.Stack.push(index)

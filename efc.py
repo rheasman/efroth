@@ -21,7 +21,7 @@ def main(filetoparse):
 
   if (Errors.count == 0):
     # Dump result
-    parser.writeResults(filebase)
+    parser.writeResults(filetoparse, filebase)
   else:
     sys.exit(1)
 

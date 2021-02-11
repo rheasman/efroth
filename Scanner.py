@@ -88,17 +88,17 @@ class Scanner(object):
    eofSym  = 0
 
    charSetSize = 256
-   maxT = 25
-   noSym = 25
+   maxT = 31
+   noSym = 31
    start = [
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  4,  0,  0,  0,  0,  2,  0, 12,  0, 18, 11, 21,  0,  0,
-     9,  9,  9,  9,  9,  9,  9,  9,  9,  9, 20, 15,  0,  0,  0,  0,
+     0,  0,  4,  0,  0,  0,  0,  2,  0, 15, 19, 18, 14, 26,  1, 20,
+    11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 28, 21, 24,  0, 25,  0,
      0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-    19,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,  1,
+    27,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  1,  0,  1,
      0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 16,  0, 17,  0,  0,
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 22,  0, 23,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -191,23 +191,23 @@ class Scanner(object):
    def CheckLiteral( self ):
       lit = self.t.val
       if lit == "IF":
-         self.t.kind = 11
-      elif lit == "ELSE":
-         self.t.kind = 12
-      elif lit == "ENDIF":
          self.t.kind = 13
-      elif lit == "FOR":
+      elif lit == "ELSE":
          self.t.kind = 14
-      elif lit == "ENDFOR":
+      elif lit == "ENDIF":
          self.t.kind = 15
-      elif lit == "REPEAT":
+      elif lit == "FOR":
          self.t.kind = 16
-      elif lit == "ENDREPEAT":
+      elif lit == "ENDFOR":
          self.t.kind = 17
-      elif lit == "WHILE":
+      elif lit == "REPEAT":
          self.t.kind = 18
-      elif lit == "ENDWHILE":
+      elif lit == "ENDREPEAT":
          self.t.kind = 19
+      elif lit == "WHILE":
+         self.t.kind = 20
+      elif lit == "ENDWHILE":
+         self.t.kind = 21
 
 
    def NextToken( self ):
@@ -237,8 +237,10 @@ class Scanner(object):
             self.t.kind = Scanner.noSym      # NextCh already done
             done = True
          elif state == 1:
-            if (self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= 'Z'
+            if (self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'z'):
                buf += str(self.ch)
@@ -298,7 +300,7 @@ class Scanner(object):
                self.t.kind = Scanner.noSym
                done = True
          elif state == 6:
-            self.t.kind = 3
+            self.t.kind = 4
             done = True
          elif state == 7:
             if (self.ch >= '0' and self.ch <= '9'):
@@ -314,13 +316,29 @@ class Scanner(object):
                self.NextCh()
                state = 8
             else:
-               self.t.kind = 4
+               self.t.kind = 5
                done = True
          elif state == 9:
             if (self.ch >= '0' and self.ch <= '9'):
                buf += str(self.ch)
                self.NextCh()
-               state = 9
+               state = 10
+            else:
+               self.t.kind = Scanner.noSym
+               done = True
+         elif state == 10:
+            if (self.ch >= '0' and self.ch <= '9'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 10
+            else:
+               self.t.kind = 6
+               done = True
+         elif state == 11:
+            if (self.ch >= '0' and self.ch <= '9'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 11
             elif self.ch == '.':
                buf += str(self.ch)
                self.NextCh()
@@ -328,36 +346,74 @@ class Scanner(object):
             else:
                self.t.kind = 2
                done = True
-         elif state == 10:
-            self.t.kind = 5
-            done = True
-         elif state == 11:
-            self.t.kind = 6
-            done = True
          elif state == 12:
+            if (self.ch >= '0' and self.ch <= '9'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 12
+            elif self.ch == '.':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 9
+            else:
+               self.t.kind = 3
+               done = True
+         elif state == 13:
             self.t.kind = 7
             done = True
-         elif state == 13:
+         elif state == 14:
             self.t.kind = 8
             done = True
-         elif state == 14:
+         elif state == 15:
             self.t.kind = 9
             done = True
-         elif state == 15:
-            self.t.kind = 20
-            done = True
          elif state == 16:
-            self.t.kind = 21
+            self.t.kind = 10
             done = True
          elif state == 17:
-            self.t.kind = 22
+            self.t.kind = 11
             done = True
          elif state == 18:
             self.t.kind = 23
             done = True
          elif state == 19:
-            if (self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= 'Z'
+            self.t.kind = 24
+            done = True
+         elif state == 20:
+            self.t.kind = 25
+            done = True
+         elif state == 21:
+            self.t.kind = 26
+            done = True
+         elif state == 22:
+            self.t.kind = 27
+            done = True
+         elif state == 23:
+            self.t.kind = 28
+            done = True
+         elif state == 24:
+            self.t.kind = 29
+            done = True
+         elif state == 25:
+            self.t.kind = 30
+            done = True
+         elif state == 26:
+            if (self.ch >= '0' and self.ch <= '9'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 12
+            elif self.ch == '-':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 17
+            else:
+               self.t.kind = 22
+               done = True
+         elif state == 27:
+            if (self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'q'
                  or self.ch >= 's' and self.ch <= 'z'):
@@ -367,31 +423,25 @@ class Scanner(object):
             elif self.ch == 'r':
                buf += str(self.ch)
                self.NextCh()
-               state = 22
+               state = 29
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 20:
+         elif state == 28:
             if self.ch == '(':
                buf += str(self.ch)
                self.NextCh()
-               state = 13
+               state = 16
             else:
-               self.t.kind = 10
+               self.t.kind = 12
                done = True
-         elif state == 21:
-            if self.ch == '-':
-               buf += str(self.ch)
-               self.NextCh()
-               state = 14
-            else:
-               self.t.kind = 24
-               done = True
-         elif state == 22:
-            if (self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= 'Z'
+         elif state == 29:
+            if (self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'n'
                  or self.ch >= 'p' and self.ch <= 'z'):
@@ -401,15 +451,17 @@ class Scanner(object):
             elif self.ch == 'o':
                buf += str(self.ch)
                self.NextCh()
-               state = 23
+               state = 30
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 23:
-            if (self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= 'Z'
+         elif state == 30:
+            if (self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'f'
                  or self.ch >= 'h' and self.ch <= 'z'):
@@ -419,15 +471,17 @@ class Scanner(object):
             elif self.ch == 'g':
                buf += str(self.ch)
                self.NextCh()
-               state = 24
+               state = 31
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 24:
-            if (self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= 'Z'
+         elif state == 31:
+            if (self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'q'
                  or self.ch >= 's' and self.ch <= 'z'):
@@ -437,15 +491,17 @@ class Scanner(object):
             elif self.ch == 'r':
                buf += str(self.ch)
                self.NextCh()
-               state = 25
+               state = 32
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 25:
-            if (self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= 'Z'
+         elif state == 32:
+            if (self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'b' and self.ch <= 'z'):
                buf += str(self.ch)
@@ -454,15 +510,17 @@ class Scanner(object):
             elif self.ch == 'a':
                buf += str(self.ch)
                self.NextCh()
-               state = 26
+               state = 33
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 26:
-            if (self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= 'Z'
+         elif state == 33:
+            if (self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'l'
                  or self.ch >= 'n' and self.ch <= 'z'):
@@ -472,15 +530,17 @@ class Scanner(object):
             elif self.ch == 'm':
                buf += str(self.ch)
                self.NextCh()
-               state = 27
+               state = 34
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 27:
-            if (self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= 'Z'
+         elif state == 34:
+            if (self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'z'):
                buf += str(self.ch)
@@ -489,7 +549,7 @@ class Scanner(object):
             elif self.ch == '(':
                buf += str(self.ch)
                self.NextCh()
-               state = 10
+               state = 13
             else:
                self.t.kind = 1
                self.t.val = buf

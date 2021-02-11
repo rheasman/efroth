@@ -52,7 +52,9 @@ class OpCodes:
     "IOW",
     "IORT",
     "FOR",
-    "ENDFOR"
+    "ENDFOR",
+    "STOP",
+    "INDEX"
   ]
 
   LONGEROPCODES = {
@@ -61,6 +63,8 @@ class OpCodes:
     "IMMU"   : 3,
     "IMMF"   : 5
   }
+
+  OPCODELEN = {}
   OPCODESET = set(OPCODELIST)
   OPCODENUM = collections.OrderedDict()
   OPCODENAME = collections.OrderedDict()
@@ -79,6 +83,28 @@ class OpCodes:
     "ENDIF"
     ])
 
+  def isImmediate(self, opcode):
+    if opcode & 0x80:
+      return True
+
+    if self.opcodeLen(opcode) > 1:
+      return True
+
+    return False
+
+  def opcodeLen(self, num):
+    if num & 0x80:
+      return 1
+
+    name = self.OPCODENAME[num]
+    return self.opNameLen(name)
+
+  def opNameLen(self, name):
+    # Length of opcode, in bytes
+    if name in self.LONGEROPCODES:
+      return self.LONGEROPCODES[name]
+
+    return 1
 
 
 if __name__ == '__main__':
