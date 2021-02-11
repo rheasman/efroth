@@ -1,20 +1,19 @@
-EFROTH
+FROTH
 
 This is a super simple stack machine that makes espresso. Optimized so that it can be
 implemented on the DE while using around 3 kB of RAM.
 
 This is similar in some ways to the FORTH language, but not the same, so I'm
-calling it a "FROTH" language. It makes espresso, hence "EFROTH".
+calling it a "FROTH" language.
 
 This is a tiny (and impure) sibling of a "real" FORTH. It is FORTH-like, but a
-lot less powerful than a real FORTH. On the other hand, it is probably easier
+lot less powerful than a real FORTH. On the other hand, it is hopefully easier
 for non-technical people to use. In a real FORTH the compiler is always
 running and advanced programmers add features to the language on the fly, so
 they can implement object orientation, multitasking, first-class datatypes,
-etc. as needed. In Espresso FORTH, the code is compiled once into a binary,
-and the binary is run on the DE1, but the compiler can do a little more
-up-front checking of the code as it sees it all at one.
-
+etc. as needed. In FROTH, the code is compiled once into a binary, and the
+binary is run on the DE1, but the compiler can do a little more up-front
+checking of the code as it sees it all at once.
 
 The CPU executes opcodes. Each opcode is 1 byte, except for:
   PCIMMS   : 2 bytes. Opcode + a single signed byte
@@ -27,14 +26,18 @@ only. If an integer value is needed, say for bitwise operations, the float is
 rounded to the nearest integer for the operation, then converted back to a
 float. Be aware that a 32-bit float can only represent 24 bits of an integer
 exactly, so keep bitwise integer operations at or below this number of bits if
-you don't want to think about possible issues.
+you don't want to think about possible issues. Floats have issues for exact
+arithmetic, but I decided that they would be easier for non-technical people
+to use.
 
 IMM is a virtual opcode in that any opcode with the top bit set is seen as a
 7-bit unsigned immediate value.
 
 How to read stack descriptions
 
-There are two halves to a stack description. The half before the "--" is the state of the stack before anything happens, and the half after the "--" is what the stack looks like when the operation is done.
+There are two halves to a stack description. The half before the "--" is the
+state of the stack before anything happens, and the half after the "--" is
+what the stack looks like when the operation is done.
 
 Get used to stack descriptions as they are a terse and powerful way to describe your code.
 
@@ -112,15 +115,20 @@ Special words
 
 FOR is used to implement the beginning of a FOR loop. {} is used to represent the control stack
 
-FOR limit step index nextblockaddr -- {limit step index}
+FOR limit step index nextblockaddr -- {limit step index}      // Index is inside limits
+ or
+FOR limit step index nextblockaddr -- ; PC = nextblockaddr    // Index is outside limits
 
 FOR copies the limit, step, and start of the loop variables onto the control stack, if the start index is inside the range, otherwise it branches to nextblockaddr. Either way, it consumes nextblockaddr.
 
 INDEX copies the xth index out of the control stack, onto the ToS. 0 is the innermost loop index.
 
-INDEX  x {limt1 step1 index1 limit0 step0 index0} -- {limt1 step1 index1 limit0 step0 index0} index_x
+INDEX  x {limit1 step1 index1 addr1 limit0 step0 index0 addr1} -- {limit1 step1 index1 addr1 limit0 step0 index0 addr0} index_x
 
-ENDFOR is used to implement the end of a FOR loop. It adds the step to the index and checks against the limit. If the index is out of range, it removes the control information from the stack and goes to the next instruction. Otherwise, it branches back to startaddr
+ENDFOR is used to implement the end of a FOR loop. It adds the step to the
+index and checks against the limit. If the index is out of range, it removes
+the control information from the stack and goes to the next instruction.
+Otherwise, it branches back to startaddr.
 
 ENDFOR {limit step index startaddr} -- {limit step index+step startaddr} ; PC = startaddr
  or
@@ -128,17 +136,21 @@ ENDFOR {limit step index startaddr} -- {}; PC = PC+1
 
 Stacks
 
-There are two stacks in this virtual CPU. They are the Data Stack, the Control Stack. The control stack remembers return addresses when a word is called (this stack can also be called the "return stack" or the "call stack"). It also holds control variables for loops. The data stack is for everything else.
+There are two stacks in this virtual CPU. They are the Data Stack, the Control
+Stack. The control stack remembers return addresses when a word is called
+(this stack can also be called the "return stack" or the "call stack"). It
+also holds control variables for loops. The data stack is for everything else.
 
 
 Higher level language features
 
 As time goes on, I will add more of these.
 
-For now, I will implement:
+For now, I have implemented:
 IF ... ENDIF 
 IF ... ELSE ... ENDIF
-FOR ... ENDFOR
+
+Still to do, maybe:
 REPEAT ... ENDREPEAT
 WHILE ... ENDWHILE
 
@@ -148,7 +160,6 @@ The general format for a program binary is:
   Header
   Vectors
   Words (Program ROM)
-
 
 
 Header:
@@ -163,7 +174,8 @@ I'm not sure what vectors make sense, and will add to them over time.
 For now, there three vectors:
 SHOT   : The word address called when a shot is started.
 IDLE   : The word address called when the machine is idle and needs to set a group idle  temperature and tank preheat temperature.
-HALT   : The word address called when something has forced a halt of the DOSHOT program. Should be used to do clean up if necessary.
+HALT   : The word address called when something has forced a halt of the SHOT program. Should be used to do clean up if necessary.
+HOTW   : The word called when hot water is requested. Not used if 0.
 
 Words:
 A word is a list of opcodes that returns when done. Basically, a function that
@@ -174,8 +186,8 @@ The last word defined is executed to start the program.
 
 Program execution environment
 
-Every second, the machine will execute 1200 opcodes. 24 per AC
-cycle at 50Hz, and 20 per AC cycle at 60 Hz.
+Every second, the machine will execute a limited number of opcodes. Limit
+still to be determined.
 
 While the program is running, this is the memory layout:
 
@@ -234,14 +246,15 @@ There are a few reserved words. All opcodes, and ":" and ";".
 ";" means compile a word and add it to the dictionary.
 ";(" is the same as ";", but used to add extra information for debugging.
 "{Label}" means define a point that can be branched to.
+"<Tag>" adds debug information for the debugger. It provides a symbolic name for the ToS.
 
-Any number will be either encoded using an SBYTE or using the constants area.
+Any number will be encoded using the shortest appropriate IMM opcode.
 
 There are convenience words defined for IO slots. Each will start with "IO_".
 
 Comments start with "//". The compiler ignores them.
 
-Here is an example:
+Here is a (NOW OBSOLETE) example:
 
 Program("Simple flat 9 bar 30s 92.5C shot", 500, 120)
 
@@ -305,6 +318,8 @@ Program("Simple flat 9 bar 30s 92C shot", 500, 120)
   30 SecsReached   // Returns 1 if seconds reached, else zero
   BZ NotDoneYet    // Jump to label if seconds not reached
   EndTheShot       // Tell DE1 to stop
+
+This program takes around 40 bytes of memory in total.
 
 Adding Features for Debugging
 
