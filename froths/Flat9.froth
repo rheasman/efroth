@@ -26,38 +26,49 @@ Program("Simple flat 9 bar 30s 92C shot", 500, 120)
   TGE            // (secs>=x) 1 if seconds > x, else 0
   ;
 
-: EndTheShot // Tell the DE1 to stop
-  IO_EndShot
-  1
-  IOW
-  ;
-
 : Idle
+  STOP
   ;
-: Halted
+: Halt
+  STOP
 ;
 
-: Wait1Sec
-  10 0 1 FOR
-  6  0 1 FOR
-  WAIT
-  ENDFOR
-  1
-  IF
-  10
-  ELSE
-  11
-  ENDIF
+: Wait1Sec  // Random test code to test FOR loops and IF statements
+  20 1 0 FOR
+    6 1 0 FOR
+      WAIT
+      0 INDEX
+      1 INDEX
+      DROP
+      DROP
+    ENDFOR
+  
+    1
+    IF
+      10
+    ELSE
+      11
+    ENDIF
+    DROP
   ENDFOR
 ;  
 
+: TestMath // Check to see how math looks in the symbolic debugger
+  GetSeconds 5 <A> +
+  7 <B> 9 <C> -
+  *
+  3.5
+  /
+;
+
 // Define the actual shot
 : RunShot
+  TestMath
   92.5 SetTemp    // Set group temperature to 92 deg C
   9 SetPressure   // Set the pressure target
 {NotDoneYet}      // Define a label
-  WAIT            // Wait until next AC Cycle
+  Wait1Sec        // Wait 1s
   30 SecsReached  // Returns 1 if seconds reached, else zero
   NotDoneYet BZ   // Jump to label if seconds not reached
-  EndTheShot      // Tell DE1 to stop
-  ;
+  STOP            // Tell DE1 to stop
+;
