@@ -1,10 +1,11 @@
-FROTH
+FROTH, a computer language to make espresso.
+--------------------------------------------
 
-This is a super simple stack machine that makes espresso. Optimized so that it can be
-implemented on the DE while using around 3 kB of RAM.
+This is a super simple stack machine that makes espresso. Optimized so that it
+can be implemented on the DE1 while using around 3 kB of RAM.
 
 This is similar in some ways to the FORTH language, but not the same, so I'm
-calling it a "FROTH" language.
+calling it the "FROTH" language.
 
 This is a tiny (and impure) sibling of a "real" FORTH. It is FORTH-like, but a
 lot less powerful than a real FORTH. On the other hand, it is hopefully easier
@@ -15,39 +16,107 @@ etc. as needed. In FROTH, the code is compiled once into a binary, and the
 binary is run on the DE1, but the compiler can do a little more up-front
 checking of the code as it sees it all at once.
 
-The CPU executes opcodes. Each opcode is 1 byte, except for:
+This CPU works by reading things off a stack, processing them, and putting
+them back onto the stack. It's called a stack because it's exactly like a
+stack of plates, with the requirement that you are only allowed to touch the
+top plate on the stack. If you put plates on the stack, then the only way to
+take plates off the stack is in reverse order. In other words, a stack is
+"Last In, First Out". The plate you can reach is the "Top of Stack" or "ToS".
+
+So for example, the "+" operation, would read two values off the stack, add
+them, and put one value back onto the stack.
+
+The advantage of doing things this way is that you never need to specify where
+things are coming from, or going to, and this saves a lot of space.
+
+So, to add two numbers, you would execute:
+
+2   // Put 2 on the stack
+3   // Put 3 on the stack
++   // Add the two numbers.
+
+So, to encode "2*3 + 5*7" would be:
+2 3 * // Put 2 and 3 on the stack, then multiply them. 6 is now on the stack
+5 7 * // Put 5 and 7 on the stack and multiply them. 6 35 are now on the stack
++     // Add the top two values on the stack, to get 41
+
+And "2 + (3*5) + 7" would be:
+2      // Put 2 on the stack
+3 5 *  // Put 3 and 5, then multiply, stack now holds "2 15"
+7      // Put 7 on the stack, stack now holds "2 15 7"
++      // Adds last two values, stack now holds "2 22"
++      // Adds last two values, stack now holds "24"
+
+Of course you could write that as "2 3 * 5 7 * +" and "2 3 5 * 7 + +" if you
+wanted to. Note that no brackets are required, and it's alway exactly 7
+operations to describe how those numbers are added; no brackets are required
+to set ordering. This works because the operators (+, -, *, etc) are "postfix"
+operators. They are the verbs that go after the objects. If the operatores go
+between the objects, we call them "infix" operators.
+
+This way of representing operations is called "Reverse Polish Notation" or
+"RPN". This name is very strange to me. It implies that things are being done
+backwards. Perhaps this is because English speakers are used to "subject verb
+object" and this works as "subject object verb". For symmetry I think we
+should call the infix way of doing things "Weird English Notation" or "WEN".
+Most people are used to WEN programming languages, but we won't hold this
+against them.
+
+Stack Descriptions
+------------------
+
+It's useful to be able to tersely specify how an operation works on a stack.
+This is done using stack descriptions. There are two halves to a stack
+description. The half before the "--" is the state of the stack before
+anything happens, and the half after the "--" is what the stack looks like
+when the operation is done. The rightmost item is the ToS.
+
+Get used to stack descriptions as they are a clean and powerful way to
+describe your code.
+
+So, 'x -- (x+1)' means that 'x' is on the stack before the operation, and
+'x+1' is on the stack after the operation.
+
+For the '+' used above, the description would be 'a b -- (a+b)'. There are two
+items on the stack before, a and b, and after "+" runs, there is one item, and
+it is (a+b)"
+
+CPU Opcodes
+-----------
+
+An opcode is an instruction to the CPU. An "operation code". Computers process
+numbers, so we use a number to represent a thing the CPU could do. "0" could
+mean "+", "1" could be "/", "2" could be "-", etc.
+
+The CPU executes a stream of opcodes. Each opcode is 1 byte, except for:
   PCIMMS   : 2 bytes. Opcode + a single signed byte
   IMMS     : 2 bytes. Opcode + a single signed byte.
   IMMU     : 3 bytes. Opcode + two bytes representing a 16-bit unsigned number
   IMMF     : 5 bytes. Opcode + 32-bit float immediate to be loaded onto the stack.
 
-All internal arithmetic operations are on floats, and the stack holds floats
-only. If an integer value is needed, say for bitwise operations, the float is
+All internal arithmetic operations in this CPU are on floats, and the stack
+holds floats only. A float is a number with a decimal point. The point can
+move around, so it's a "floating point" number, which is where this silly and
+unexpected name comes from. For example, "2.0", "0.2", "0.0002", "20.0".
+Floats are great because they can describe numbers that are not integers.
+People program with integers all the time, but it's annoying and not for
+beginners. Representing the root of 2 using integers is a pain, for example.
+In fact, behind the scene, floats are actually implemented using integers, but
+it's all nicely hidden from you (mostly).
+
+If an integer value is needed, say for bitwise operations, the float is
 rounded to the nearest integer for the operation, then converted back to a
 float. Be aware that a 32-bit float can only represent 24 bits of an integer
 exactly, so keep bitwise integer operations at or below this number of bits if
 you don't want to think about possible issues. Floats have issues for exact
 arithmetic, but I decided that they would be easier for non-technical people
-to use.
+to use for our use cases.
 
-IMM is a virtual opcode in that any opcode with the top bit set is seen as a
-7-bit unsigned immediate value.
+Basic opcodes
+-------------
 
-How to read stack descriptions
-
-There are two halves to a stack description. The half before the "--" is the
-state of the stack before anything happens, and the half after the "--" is
-what the stack looks like when the operation is done.
-
-Get used to stack descriptions as they are a terse and powerful way to describe your code.
-
-So, 'x -- (x+1)' means that 'x' is on the stack before the operation, and
-'x+1' is on the stack after the operation.
-
-Basic opcodes:
-
-Opcode Name Stack Inputs "--" Stack Outputs
------------|--------------|---------------
+Opcode Name Stack Inputs "--" Stack Outputs : Comments
+-----------|--------------|-----------------|---------
 
 DUP   x -- x x         : Duplicate value on top of stack.
 DROP  x y -- x         : Discard TOS.
@@ -111,17 +180,56 @@ IOR   x -- IO[x]       : Read value of type x. (Reads state or sensor)
 IOW   x y --           : Put value x to control y. (Commands a state or target value)
 IORT  x -- LastIO[x]   : Read last value written to y. (Reads back what the machine actually accepted)
 
-Special words
+Comments
+--------
 
-FOR is used to implement the beginning of a FOR loop. {} is used to represent the control stack
+FROTH uses "//" to start a comment. The compiler ignores everything after a
+"//". Humans use these to leave notes about what they are doing, in their
+code, beause humans forget things and are so dumb they even have to explain
+their own code to themselves.
+
+Words
+-----
+
+A word is a command to the CPU do something. In fact, "opcodes" are just words
+built into the CPU. We can define new words, which are just collections of
+words themselves. We call this collection of words a dictionary.
+
+FORTH uses ":" to define a new word entry and ";" to end a definition. For example:
+
+: AddOne 1 + ;  // x -- (x+1)
+
+Using this word will put 1 on the stack, then do an add, then go on to the
+next word. Words can be layered on top of each other.
+
+: StupidAddThree AddOne AddOne AddOne ; // x -- (x+3)
+
+Using this word will add 3 to the top of the stack, in a particularly dumb
+way. But it shows how you can make words out of other words.
+
+
+Details on Special Words
+------------------------
+
+Skip this section if you are beginner. :-)
+
+IMM is a virtual opcode in that any opcode with the top bit set is seen as a
+7-bit unsigned immediate value. So it's actually 128 opcodes, which represent
+the numbers 0 through 128.
+
+FOR is used to implement the beginning of a FOR loop. {} is used to represent
+the control stack
 
 FOR limit step index nextblockaddr -- {limit step index}      // Index is inside limits
  or
 FOR limit step index nextblockaddr -- ; PC = nextblockaddr    // Index is outside limits
 
-FOR copies the limit, step, and start of the loop variables onto the control stack, if the start index is inside the range, otherwise it branches to nextblockaddr. Either way, it consumes nextblockaddr.
+FOR copies the limit, step, and start of the loop variables onto the control
+stack, if the start index is inside the range, otherwise it branches to
+nextblockaddr. Either way, it consumes nextblockaddr.
 
-INDEX copies the xth index out of the control stack, onto the ToS. 0 is the innermost loop index.
+INDEX copies the xth index out of the control stack, onto the ToS. 0 is the
+innermost loop index.
 
 INDEX  x {limit1 step1 index1 addr1 limit0 step0 index0 addr1} -- {limit1 step1 index1 addr1 limit0 step0 index0 addr0} index_x
 
@@ -135,16 +243,24 @@ ENDFOR {limit step index startaddr} -- {limit step index+step startaddr} ; PC = 
 ENDFOR {limit step index startaddr} -- {}; PC = PC+1
 
 Stacks
+------
 
-There are two stacks in this virtual CPU. They are the Data Stack, the Control
+There are two stacks in this virtual CPU. They are the Data Stack and the Control
 Stack. The control stack remembers return addresses when a word is called
 (this stack can also be called the "return stack" or the "call stack"). It
 also holds control variables for loops. The data stack is for everything else.
 
+So, if the word "StupidAddThree" calls "AddOne", then the CPU's place in the
+word is remembered on the call stack while the "AddOne" words are being
+executed.
+
 
 Higher level language features
+------------------------------
 
-As time goes on, I will add more of these.
+As time goes on, I will add more of these. They are typically implemented in
+the FROTH compiler, rather than being directly implemented with words. You
+write these structures, and the compiler converts them to words.
 
 For now, I have implemented:
 IF ... ENDIF 
@@ -153,8 +269,10 @@ IF ... ELSE ... ENDIF
 Still to do, maybe:
 REPEAT ... ENDREPEAT
 WHILE ... ENDWHILE
+CONST
 
 Program Executable Layout
+-------------------------
 
 The general format for a program binary is:
   Header
@@ -185,16 +303,17 @@ words together should take less than 1024 bytes.
 The last word defined is executed to start the program.
 
 Program execution environment
+-----------------------------
 
-Every second, the machine will execute a limited number of opcodes. Limit
-still to be determined.
+Every second, the machine will execute a limited number of opcodes. This limit
+is still to be determined.
 
 While the program is running, this is the memory layout:
 
 Globals:
 
-The store and fetch commands can store or fetch values from 64 slots. These slots are
-the equivalent of global variables.
+The store and fetch commands can store or fetch values from 64 slots. These
+slots are the equivalent of global variables.
 
 PacketData:
 
@@ -203,9 +322,9 @@ received. Each packet is exactly 16 bytes long. All bytes are sent or
 received.
 
 Thus, there are two 16 byte areas. One for TX and one for RX. The PS opcode is
-used to write ('store') to the TX packet area, and the PF opcode is used to read
-('fetch') from the RX packet area. The RX packet area is read only, and the TX
-packet area is write only.
+used to write ('store') to the TX packet area, and the PF opcode is used to
+read ('fetch') from the RX packet area. The RX packet area is read only, and
+the TX packet area is write only.
 
 The TXP opcode sends the contents of the TX packet area. 
 
@@ -216,13 +335,17 @@ The IO Region:
 
 This is the region used to control and respond to the espresso machine.
 
-Doing a IOR reads a sensor value, or the current state of the machine.
-IOW commands a state or asks that a sensor value be targeted.
+Doing a IOR reads a sensor value, or the current state of the machine. IOW
+commands a state or asks that a sensor value be targeted.
 
 For example, writing "10" to "Pressure" sets 10 as a target pressure to reach.
-An IOR of "Pressure" will return the current pressure, and IORT will return "10"
-telling you what it thinks the target is that you requested. Writing to slots
-that make no sense will halt your program.
+An IOR of "Pressure" will return the current pressure, and IORT will return
+"10" telling you what it thinks the target is that you requested. Writing to
+slots that make no sense will halt your program. Writing an out of range value
+will silently clamp the value to the allowed range, and you'll be able to see
+this clamping if you use IORT to read back your write.
+
+Current IO consts defined:
 
 0 : Pressure (IO_Pressure)
 1 : Shower head temperature
@@ -234,19 +357,33 @@ that make no sense will halt your program.
 7 : Number of seconds since start of frame
 8 : End shot. (Write 1 to this to end a shot)
 
-Source code format.
+The Profile Region:
+
+This is a read-only view on the profile data sent over BLE to the machine, for
+current normal and advanced profiles. The FROTH script may opt to read from
+this area so that it can sequence shots using the settings stored here.
+
+The FROTH Language
+------------------
 
 Your job as the programmer is to define the words that will be executed.
 
-Each program will start with "Program(Name, MaxVol, MaxSecs)".
+Each program will start with "Program(Name, MaxVol, MaxSecs)". MaxVol and
+MaxSecs are safety limits that the DE1 will not let the program exceed.
 
 There are a few reserved words. All opcodes, and ":" and ";".
 
 ":" means define a word.
+
 ";" means compile a word and add it to the dictionary.
+
 ";(" is the same as ";", but used to add extra information for debugging.
+
 "{Label}" means define a point that can be branched to.
-"<Tag>" adds debug information for the debugger. It provides a symbolic name for the ToS.
+
+"<Tag>" adds debug information for the debugger. It provides a symbolic name
+for the ToS. The CPU never sees this, but the Delgona debugger sees this
+information so that it can describe the stack better for you.
 
 Any number will be encoded using the shortest appropriate IMM opcode.
 
@@ -254,7 +391,8 @@ There are convenience words defined for IO slots. Each will start with "IO_".
 
 Comments start with "//". The compiler ignores them.
 
-Here is a (NOW OBSOLETE) example:
+Here is a (NOW OBSOLETE) example. Some features have changed, and others have
+been added. Its still fairly close though:
 
 Program("Simple flat 9 bar 30s 92.5C shot", 500, 120)
 
@@ -322,6 +460,7 @@ Program("Simple flat 9 bar 30s 92C shot", 500, 120)
 This program takes around 40 bytes of memory in total.
 
 Adding Features for Debugging
+-----------------------------
 
 The extended debugging format for a word will look like this:
 
@@ -332,8 +471,23 @@ debugger. In the debugger, the different stack positions will use the names
 given, during single step debugging. The compiled code will not use the extra
 information.
 
+Also, the programmer can insert tags anywhere, and they are used to describe the ToS.
+
+For example:
+
+: GetSeconds     // Get number of seconds elapsed since start of shot
+  IO_NumSeconds  // Put constant referring to number of seconds since start of shot on stack
+  IOR            // Read number of seconds
+  <Seconds>
+  ; 
+
+The debugger will call the stack element associated with the return value from
+this word "Seconds". THe CPU will be completely unaware of this, as none of
+this information is passed to it. This is just extra information for human
+consumption.
 
 Binary Format
+-------------
 
 The binary format will be as follows. All numbers are little endian.
 
