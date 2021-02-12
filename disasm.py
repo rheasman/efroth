@@ -63,12 +63,9 @@ class DebugDis:
     self.PrettyAddr = {}
     lastaddr = 0
     lastword = ''
-    print(self.Words)
+    #print(self.Words)
     for addr in self.AddrToSource.keys():
       anum = int(addr)
-      if anum in self.WordsByAddr:
-        print("!")
-      
 
     self.MemBytes = array.array('B', [x[1][-1] for x in self.AddrToSource.items()])
 
