@@ -23,6 +23,9 @@ class F32Stack:
     self.CallbackU = callbackunder
     self.Changed = True
 
+  def reset(self):
+    self.Stack = deque()
+
   def __len__(self):
     return len(self.Stack)
 
@@ -234,6 +237,8 @@ class CPU:
     self.PC = self.D.Words["RunShot"][1]
     self.Cycles = 0
     self.Stopped = 0
+    self.Stack.reset()
+    self.CallStack.reset()
 
   def moveToWord(self, word):
     if word in self.D.Words:
