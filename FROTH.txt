@@ -1,4 +1,6 @@
-FROTH, a computer language to make espresso.
+              **FROTH, a computer language to make espresso.**
+
+# FROTH
 --------------------------------------------
 
 This is a super simple stack machine that makes espresso. Optimized so that it
@@ -31,27 +33,29 @@ things are coming from, or going to, and this saves a lot of space.
 
 So, to add two numbers, you would execute:
 
-2   // Put 2 on the stack
-3   // Put 3 on the stack
-+   // Add the two numbers.
+	2   // Put 2 on the stack
+	3   // Put 3 on the stack
+	+   // Add the two numbers.
 
 So, to encode "2*3 + 5*7" would be:
-2 3 * // Put 2 and 3 on the stack, then multiply them. 6 is now on the stack
-5 7 * // Put 5 and 7 on the stack and multiply them. 6 35 are now on the stack
-+     // Add the top two values on the stack, to get 41
+
+	2 3 * // Put 2 and 3 on the stack, then multiply them. 6 is now on the stack
+	5 7 * // Put 5 and 7 on the stack and multiply them. 6 35 are now on the stack
+	+     // Add the top two values on the stack, to get 41
 
 And "2 + (3*5) + 7" would be:
-2      // Put 2 on the stack
-3 5 *  // Put 3 and 5, then multiply, stack now holds "2 15"
-7      // Put 7 on the stack, stack now holds "2 15 7"
-+      // Adds last two values, stack now holds "2 22"
-+      // Adds last two values, stack now holds "24"
+
+	2      // Put 2 on the stack
+	3 5 *  // Put 3 and 5, then multiply, stack now holds "2 15"
+	7      // Put 7 on the stack, stack now holds "2 15 7"
+	+      // Adds last two values, stack now holds "2 22"
+	+      // Adds last two values, stack now holds "24"
 
 Of course you could write that as "2 3 * 5 7 * +" and "2 3 5 * 7 + +" if you
 wanted to. Note that no brackets are required, and it's alway exactly 7
 operations to describe how those numbers are added; no brackets are required
 to set ordering. This works because the operators (+, -, *, etc) are "postfix"
-operators. They are the verbs that go after the objects. If the operatores go
+operators. They are the verbs that go after the objects. If the operators go
 between the objects, we call them "infix" operators.
 
 This way of representing operations is called "Reverse Polish Notation" or
@@ -79,7 +83,7 @@ So, 'x -- (x+1)' means that 'x' is on the stack before the operation, and
 
 For the '+' used above, the description would be 'a b -- (a+b)'. There are two
 items on the stack before, a and b, and after "+" runs, there is one item, and
-it is (a+b)"
+it is (a+b).
 
 CPU Opcodes
 -----------
@@ -89,10 +93,10 @@ numbers, so we use a number to represent a thing the CPU could do. "0" could
 mean "+", "1" could be "/", "2" could be "-", etc.
 
 The CPU executes a stream of opcodes. Each opcode is 1 byte, except for:
-  PCIMMS   : 2 bytes. Opcode + a single signed byte
-  IMMS     : 2 bytes. Opcode + a single signed byte.
-  IMMU     : 3 bytes. Opcode + two bytes representing a 16-bit unsigned number
-  IMMF     : 5 bytes. Opcode + 32-bit float immediate to be loaded onto the stack.
+  * PCIMMS   : 2 bytes. Opcode + a single signed byte
+  * IMMS     : 2 bytes. Opcode + a single signed byte.
+  * IMMU     : 3 bytes. Opcode + two bytes representing a 16-bit unsigned number
+  * IMMF     : 5 bytes. Opcode + 32-bit float immediate to be loaded onto the stack.
 
 All internal arithmetic operations in this CPU are on floats, and the stack
 holds floats only. A float is a number with a decimal point. The point can
@@ -115,132 +119,130 @@ to use for our use cases.
 Basic opcodes
 -------------
 
-Opcode Name Stack Inputs "--" Stack Outputs : Comments
------------|--------------|-----------------|---------
+Opcode Name | Stack Inputs "--" Stack Outputs | Comments |
+:-          |:                                |          |
+DUP    |x -- x x         | Duplicate value on top of stack.
+DROP   |x y -- x         | Discard TOS.
+OVER   |x y -- x y x     | Duplicates the value at TOS-1. (Call twice to duplicate both values)
+SWAP   |x y -- y x       | Swap x and y.
+COPY   |x -- Stack[-x]   | Copy a value out of the stack at position TOS - x, to TOS. 0 is the item before x
+       |||
++      |x y -- (x+y)     | Add x and y.
+-      |x y -- (x-y)     | Subtract y from x.
+*      |x y -- (x*y)     | Multiply x and y.
+/      |x y -- (x/y)     | Divide x by y.
+       |||
+POW    |x y -- pow(x,y)  | Take x to the power of y.
+NEG    |x -- (-x)        | Invert sign of TOS.
+REC    |x -- (1/x)       | Reciprocal of TOS.
+       |||
+TZ     |x -- (1 or 0)    | Test Zero.  TOS = 1 if x  = 0, else 0
+TGT    |x y -- (x>y)     | Test Greater Than.  TOS = 1 if x  > y, else 0
+TLT    |x y -- (x<y)     | Test Less Than. TOS = 1 if x  < y, else 0
+TGE    |x y -- (x>=y)    | Test Greater or Equal.  TOS = 1 if x >= y, else 0
+TLE    |x y -- (x<=y)    | Test Less or Equal. TOS = 1 if x <= y, else 0
+TIN    |x -- (1 or 0)    | Test Invalid Number. TOS = 1 if x is NaN or Inf
+       |||
+OR     |x y -- (x  OR y) | Bitwise integer OR. Note that a FLOAT32 can only represent up to 24-bit integers exactly.
+AND    |x y -- (x AND y) | Bitwise integer AND
+XOR    |x y -- (x XOR y) | Bitwise integer XOR
+BINV   |x   -- (~x)      | Bitwise Inverse. x is rounded to the nearest integer before the operation
+       |||
+BNZ    |x a --           | Branch to a if x != 0.
+BZ     |x a --           | Branch to a if x == 0.
+BRA    |a   --           | Branch to a.
+       |||
+CALL   |x                | Execute word x.
+;      |                 | Returns to calling word.
+WAIT   |                 | Sleep until the start of the next AC cycle.
+NOP    |                 | Does nothing.
+       |||
+TOR    |x  --            | Pop x and push to Call Stack
+FROMR  |-- x             | Pop from Call stack and push to ToS
+       |||
+TOC    |x  --            | Pop x and push to Control Stack
+FROMC  |-- x             | Pop from Control Stack and push to ToS
+COPYC  |-- x             | Push a copy of Control Stack ToS to ToS
+       |||
+PCIMMS |# -- x          | Push PC + # onto the stack.
+IMM    |# -- x          | Push an immediate value from (0..127) onto the stack.
+IMMS   |# -- x          | Push an immediate value from (-127 to 128) onto the stack.
+IMMU   |# -- x          | Push an immediate value from (0 to 65536) onto the stack.
+IMMF   |# -- x          | Push an immediate single-precision float (32-bit) onto the stack.
+       |||
+!      |x y -- [y] = x       | Store x at address y.
+@      |y   -- [y]             | Fetch a value from address y, put it on the stack.
+       |||
+!8     |x y -- [y] = x   | Convert x to a single byte and store it at address y.
+@8     |y -- [y]         | Load a single byte from position y in the packet store.
+       |||
+TXP    |-- x           | Send a packet if possible. Return 1 if sent, 0 if dropped.
+RXP?   | -- x           | Return 1 if a packet arrived, else zero. PacketData RX area is not modified until this is called.
+       |||
+IOR    |x -- IO[x]       | Read value of type x. (Reads state or sensor)
+IOW    |x y --           | Put value x to control y. (Commands a state or target value)
+IORT   |x -- LastIO[x]   | Read last value written to y. (Reads back what the machine actually accepted)
 
-DUP   x -- x x         : Duplicate value on top of stack.
-DROP  x y -- x         : Discard TOS.
-OVER  x y -- x y x     : Duplicates the value at TOS-1. (Call twice to duplicate both values)
-SWAP  x y -- y x       : Swap x and y.
-COPY  x -- Stack[-x]   : Copy a value out of the stack at position TOS - x, to TOS. 0 is the item before x
-
-+     x y -- (x+y)     : Add x and y.
--     x y -- (x-y)     : Subtract y from x.
-*     x y -- (x*y)     : Multiply x and y.
-/     x y -- (x/y)     : Divide x by y.
-POW   x y -- pow(x,y)  : Take x to the power of y.
-NEG   x -- (-x)        : Invert sign of TOS.
-REC   x -- (1/x)       : Reciprocal of TOS.
-
-TZ    x -- 1|0         : Test Zero.  TOS = 1 if x  = 0, else 0
-TGT   x y -- (x>y)     : Test Greater Than.  TOS = 1 if x  > y, else 0
-TLT   x y -- (x<y)     : Test Less Than. TOS = 1 if x  < y, else 0
-TGE   x y -- (x>=y)    : Test Greater or Equal.  TOS = 1 if x >= y, else 0
-TLE   x y -- (x<=y)    : Test Less or Equal. TOS = 1 if x <= y, else 0
-
-TIN   x -- 1|0         : Test Invalid Number. TOS = 1 if x is NaN or Inf
-
-OR    x y -- (x  OR y) : Bitwise integer OR. Note that a FLOAT32 can only represent up to 24-bit integers exactly.
-AND   x y -- (x AND y) : Bitwise integer AND
-XOR   x y -- (x XOR y) : Bitwise integer XOR
-BINV  x   -- (~x)      : Bitwise Inverse. x is rounded to the nearest integer before the operation
-
-BNZ   x a --           : Branch to a if x != 0.
-BZ    x a --           : Branch to a if x == 0.
-BRA   a   --           : Branch to a.
-
-CALL  x                : Execute word x.
-;                      : Returns to calling word.
-WAIT                   : Sleep until the start of the next AC cycle.
-NOP                    : Does nothing.
-
-TOR   x  --            : Pop x and push to Call Stack
-FROMR -- x             : Pop from Call stack and push to ToS
-
-TOC   x  --            : Pop x and push to Control Stack
-FROMC -- x             : Pop from Control Stack and push to ToS
-COPYC -- x             : Push a copy of Control Stack ToS to ToS
-
-PCIMMS # -- x          : Push PC + # onto the stack.
-IMM    # -- x          : Push an immediate value from (0..127) onto the stack.
-IMMS   # -- x          : Push an immediate value from (-127 to 128) onto the stack.
-IMMU   # -- x          : Push an immediate value from (0 to 65536) onto the stack.
-IMMF   # -- x          : Push an immediate single-precision float (32-bit) onto the stack.
-
-STORE x y -- [y] = x   : Store x in slot y.
-FETCH y -- [y]         : Fetch a value from slot y, put it on the stack.
-
-PS    x y -- [y] = x   : Convert x to a single byte and store it at packet offset y.
-PF    y -- [y]         : Load a single byte from position y in the packet store.
-
-TXP     -- x           : Send a packet if possible. Return 1 if sent, 0 if dropped.
-RXP?    -- x           : Return 1 if a packet arrived, else zero. PacketData RX area is not modified until this is called.
-
-IOR   x -- IO[x]       : Read value of type x. (Reads state or sensor)
-IOW   x y --           : Put value x to control y. (Commands a state or target value)
-IORT  x -- LastIO[x]   : Read last value written to y. (Reads back what the machine actually accepted)
-
-Comments
---------
-
+## Comments
 FROTH uses "//" to start a comment. The compiler ignores everything after a
 "//". Humans use these to leave notes about what they are doing, in their
 code, beause humans forget things and are so dumb they even have to explain
 their own code to themselves.
 
-Words
------
-
+## Words
 A word is a command to the CPU do something. In fact, "opcodes" are just words
 built into the CPU. We can define new words, which are just collections of
 words themselves. We call this collection of words a dictionary.
 
-FORTH uses ":" to define a new word entry and ";" to end a definition. For example:
+FROTH uses ":" to define a new word entry and ";" to end a definition. For example:
 
-: AddOne 1 + ;  // x -- (x+1)
+    : AddOne 1 + ;  // x -- (x+1)
 
 Using this word will put 1 on the stack, then do an add, then go on to the
 next word. Words can be layered on top of each other.
 
-: StupidAddThree AddOne AddOne AddOne ; // x -- (x+3)
+    : StupidAddThree AddOne AddOne AddOne ; // x -- (x+3)
 
 Using this word will add 3 to the top of the stack, in a particularly dumb
 way. But it shows how you can make words out of other words.
-
 
 Details on Special Words
 ------------------------
 
 Skip this section if you are beginner. :-)
 
-IMM is a virtual opcode in that any opcode with the top bit set is seen as a
+__IMM__ is a virtual opcode in that any opcode with the top bit set is seen as a
 7-bit unsigned immediate value. So it's actually 128 opcodes, which represent
 the numbers 0 through 128.
 
-FOR is used to implement the beginning of a FOR loop. {} is used to represent
-the control stack
+__FOR__ is used to implement the beginning of a FOR loop. {} is used to represent
+the control stack:
 
-FOR limit step index nextblockaddr -- {limit step index}      // Index is inside limits
+    FOR limit step index nextblockaddr -- {limit step index}      // Index is inside limits
+ 
  or
-FOR limit step index nextblockaddr -- ; PC = nextblockaddr    // Index is outside limits
 
-FOR copies the limit, step, and start of the loop variables onto the control
+    FOR limit step index nextblockaddr -- ; PC = nextblockaddr    // Index is outside limits
+
+__FOR__ copies the limit, step, and start of the loop variables onto the control
 stack, if the start index is inside the range, otherwise it branches to
 nextblockaddr. Either way, it consumes nextblockaddr.
 
-INDEX copies the xth index out of the control stack, onto the ToS. 0 is the
-innermost loop index.
+__INDEX__ copies the xth index out of the control stack, onto the ToS. 0 is the
+innermost loop index:
 
-INDEX  x {limit1 step1 index1 addr1 limit0 step0 index0 addr1} -- {limit1 step1 index1 addr1 limit0 step0 index0 addr0} index_x
+    INDEX  x {limit1 step1 index1 addr1 limit0 step0 index0 addr1} -- {limit1 step1 index1 addr1 limit0 step0 index0 addr0} index_x
 
-ENDFOR is used to implement the end of a FOR loop. It adds the step to the
+__ENDFOR__ is used to implement the end of a __FOR__ loop. It adds the step to the
 index and checks against the limit. If the index is out of range, it removes
 the control information from the stack and goes to the next instruction.
-Otherwise, it branches back to startaddr.
+Otherwise, it branches back to startaddr:
 
-ENDFOR {limit step index startaddr} -- {limit step index+step startaddr} ; PC = startaddr
+    ENDFOR {limit step index startaddr} -- {limit step index+step startaddr} ; PC = startaddr
+    
  or
-ENDFOR {limit step index startaddr} -- {}; PC = PC+1
+ 
+    ENDFOR {limit step index startaddr} -- {}; PC = PC+1
 
 Stacks
 ------
@@ -263,13 +265,15 @@ the FROTH compiler, rather than being directly implemented with words. You
 write these structures, and the compiler converts them to words.
 
 For now, I have implemented:
-IF ... ENDIF 
-IF ... ELSE ... ENDIF
+
+    IF ... ENDIF 
+    IF ... ELSE ... ENDIF
 
 Still to do, maybe:
-REPEAT ... ENDREPEAT
-WHILE ... ENDWHILE
-CONST
+
+    REPEAT ... ENDREPEAT
+    WHILE ... ENDWHILE
+    CONST
 
 Program Executable Layout
 -------------------------
@@ -392,7 +396,7 @@ There are convenience words defined for IO slots. Each will start with "IO_".
 Comments start with "//". The compiler ignores them.
 
 Here is a (NOW OBSOLETE) example. Some features have changed, and others have
-been added. Its still fairly close though:
+been added. It's still fairly close though:
 
 Program("Simple flat 9 bar 30s 92.5C shot", 500, 120)
 
@@ -501,3 +505,11 @@ The binary format will be as follows. All numbers are little endian.
 0010 - 0011 : Vector: HALT : Called to cleanup a shot if an error occurs. 0 means not used.
 xxxx - xxxx : Length of program ROM in bytes.
 000E - xxxx : Program ROM
+
+
+
+<!-- Markdeep footer -->
+    <style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
+    <script src="markdeep.min.js"></script>
+    <script src="https://casual-effects.com/markdeep/latest/markdeep.min.js"></script>
+    <script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>
