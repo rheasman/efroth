@@ -1,7 +1,7 @@
-              **FROTH, a computer language to make espresso.**
+              **FROTH, a computer language to make espresso**
 
-# FROTH
---------------------------------------------
+FROTH
+=====
 
 This is a super simple stack machine that makes espresso. Optimized so that it
 can be implemented on the DE1 while using around 3 kB of RAM.
@@ -32,25 +32,25 @@ The advantage of doing things this way is that you never need to specify where
 things are coming from, or going to, and this saves a lot of space.
 
 So, to add two numbers, you would execute:
-
+```
 	2   // Put 2 on the stack
 	3   // Put 3 on the stack
 	+   // Add the two numbers.
-
+```
 So, to encode "2*3 + 5*7" would be:
-
+```
 	2 3 * // Put 2 and 3 on the stack, then multiply them. 6 is now on the stack
 	5 7 * // Put 5 and 7 on the stack and multiply them. 6 35 are now on the stack
 	+     // Add the top two values on the stack, to get 41
-
+```
 And "2 + (3*5) + 7" would be:
-
+```
 	2      // Put 2 on the stack
 	3 5 *  // Put 3 and 5, then multiply, stack now holds "2 15"
 	7      // Put 7 on the stack, stack now holds "2 15 7"
 	+      // Adds last two values, stack now holds "2 22"
 	+      // Adds last two values, stack now holds "24"
-
+```
 Of course you could write that as "2 3 * 5 7 * +" and "2 3 5 * 7 + +" if you
 wanted to. Note that no brackets are required, and it's alway exactly 7
 operations to describe how those numbers are added; no brackets are required
@@ -116,11 +116,11 @@ you don't want to think about possible issues. Floats have issues for exact
 arithmetic, but I decided that they would be easier for non-technical people
 to use for our use cases.
 
-Basic opcodes
--------------
+Basics
+------
 
-Opcode Name | Stack Inputs "--" Stack Outputs | Comments |
-:-          |:                                |          |
+Opcode Name | Stack Inputs "--" Stack Outputs | Comments 
+:-----------|:--------------------------------|----------
 DUP    |x -- x x         | Duplicate value on top of stack.
 DROP   |x y -- x         | Discard TOS.
 OVER   |x y -- x y x     | Duplicates the value at TOS-1. (Call twice to duplicate both values)
@@ -137,10 +137,10 @@ NEG    |x -- (-x)        | Invert sign of TOS.
 REC    |x -- (1/x)       | Reciprocal of TOS.
        |||
 TZ     |x -- (1 or 0)    | Test Zero.  TOS = 1 if x  = 0, else 0
-TGT    |x y -- (x>y)     | Test Greater Than.  TOS = 1 if x  > y, else 0
-TLT    |x y -- (x<y)     | Test Less Than. TOS = 1 if x  < y, else 0
-TGE    |x y -- (x>=y)    | Test Greater or Equal.  TOS = 1 if x >= y, else 0
-TLE    |x y -- (x<=y)    | Test Less or Equal. TOS = 1 if x <= y, else 0
+TGT    |x y -- (x&gt;y)     | Test Greater Than.  TOS = 1 if x  &gt; y, else 0
+TLT    |x y -- (x&lt;y)     | Test Less Than. TOS = 1 if x  &lt; y, else 0
+TGE    |x y -- (x&gt;=y)    | Test Greater or Equal.  TOS = 1 if x &gt;= y, else 0
+TLE    |x y -- (x&lt;=y)    | Test Less or Equal. TOS = 1 if x &lt;= y, else 0
 TIN    |x -- (1 or 0)    | Test Invalid Number. TOS = 1 if x is NaN or Inf
        |||
 OR     |x y -- (x  OR y) | Bitwise integer OR. Note that a FLOAT32 can only represent up to 24-bit integers exactly.
@@ -182,33 +182,31 @@ RXP?   | -- x           | Return 1 if a packet arrived, else zero. PacketData RX
 IOR    |x -- IO[x]       | Read value of type x. (Reads state or sensor)
 IOW    |x y --           | Put value x to control y. (Commands a state or target value)
 IORT   |x -- LastIO[x]   | Read last value written to y. (Reads back what the machine actually accepted)
-
-## Comments
+### Comments
 FROTH uses "//" to start a comment. The compiler ignores everything after a
 "//". Humans use these to leave notes about what they are doing, in their
 code, beause humans forget things and are so dumb they even have to explain
 their own code to themselves.
 
-## Words
+### Words
 A word is a command to the CPU do something. In fact, "opcodes" are just words
 built into the CPU. We can define new words, which are just collections of
 words themselves. We call this collection of words a dictionary.
 
 FROTH uses ":" to define a new word entry and ";" to end a definition. For example:
-
+```
     : AddOne 1 + ;  // x -- (x+1)
-
+```
 Using this word will put 1 on the stack, then do an add, then go on to the
 next word. Words can be layered on top of each other.
-
+```
     : StupidAddThree AddOne AddOne AddOne ; // x -- (x+3)
+```
 
 Using this word will add 3 to the top of the stack, in a particularly dumb
 way. But it shows how you can make words out of other words.
 
-Details on Special Words
-------------------------
-
+#### Details on Special Words
 Skip this section if you are beginner. :-)
 
 __IMM__ is a virtual opcode in that any opcode with the top bit set is seen as a
@@ -217,22 +215,22 @@ the numbers 0 through 128.
 
 __FOR__ is used to implement the beginning of a FOR loop. {} is used to represent
 the control stack:
-
+```
     FOR limit step index nextblockaddr -- {limit step index}      // Index is inside limits
- 
+```
  or
-
+```
     FOR limit step index nextblockaddr -- ; PC = nextblockaddr    // Index is outside limits
-
+```
 __FOR__ copies the limit, step, and start of the loop variables onto the control
 stack, if the start index is inside the range, otherwise it branches to
 nextblockaddr. Either way, it consumes nextblockaddr.
 
 __INDEX__ copies the xth index out of the control stack, onto the ToS. 0 is the
 innermost loop index:
-
+```
     INDEX  x {limit1 step1 index1 addr1 limit0 step0 index0 addr1} -- {limit1 step1 index1 addr1 limit0 step0 index0 addr0} index_x
-
+```
 __ENDFOR__ is used to implement the end of a __FOR__ loop. It adds the step to the
 index and checks against the limit. If the index is out of range, it removes
 the control information from the stack and goes to the next instruction.
@@ -244,9 +242,7 @@ Otherwise, it branches back to startaddr:
  
     ENDFOR {limit step index startaddr} -- {}; PC = PC+1
 
-Stacks
-------
-
+### Stacks
 There are two stacks in this virtual CPU. They are the Data Stack and the Control
 Stack. The control stack remembers return addresses when a word is called
 (this stack can also be called the "return stack" or the "call stack"). It
@@ -257,87 +253,98 @@ word is remembered on the call stack while the "AddOne" words are being
 executed.
 
 
-Higher level language features
-------------------------------
+## Higher level language features
+
 
 As time goes on, I will add more of these. They are typically implemented in
 the FROTH compiler, rather than being directly implemented with words. You
 write these structures, and the compiler converts them to words.
 
 For now, I have implemented:
-
+```
     IF ... ENDIF 
     IF ... ELSE ... ENDIF
-
+```
 Still to do, maybe:
-
+```
     REPEAT ... ENDREPEAT
     WHILE ... ENDWHILE
     CONST
+```
 
-Program Executable Layout
--------------------------
+## Program Executable Layout
 
 The general format for a program binary is:
+```
   Header
   Vectors
   Words (Program ROM)
+```
 
-
-Header:
+### Header:
 A program starts with a max volume and a max number of seconds, for safety.
 The header also version numbers and other useful bits.
 
-Vectors: 
+### Vectors: 
 This is a list of words that are called in special circumstances.
 
 I'm not sure what vectors make sense, and will add to them over time.
 
 For now, there three vectors:
-SHOT   : The word address called when a shot is started.
-IDLE   : The word address called when the machine is idle and needs to set a group idle  temperature and tank preheat temperature.
-HALT   : The word address called when something has forced a halt of the SHOT program. Should be used to do clean up if necessary.
-HOTW   : The word called when hot water is requested. Not used if 0.
 
-Words:
+Vector | Use
+-------|-----
+SHOT   | The word address called when a shot is started.
+IDLE   | The word address called when the machine is idle and needs to set a group idle  temperature and tank preheat temperature.
+HALT   | The word address called when something has forced a halt of the SHOT program. Should be used to do clean up if necessary.
+HOTW   | The word called when hot water is requested. Not used if 0.
+
+### Words:
 A word is a list of opcodes that returns when done. Basically, a function that
 accepts a stack and that can modify it. You can have up to 256 words, and all
 words together should take less than 1024 bytes.
 
 The last word defined is executed to start the program.
 
-Program execution environment
------------------------------
+## Program execution environment
 
 Every second, the machine will execute a limited number of opcodes. This limit
 is still to be determined.
 
+### Memory Map
+
 While the program is running, this is the memory layout:
 
-Globals:
+Name        | Address Dec | Address Hex   | RW | Use
+------------|-------------|---------------|----|-----
+Scratch RAM |    0 -  255 | 0000 - 0100   | RW | 64 Floats or 256 Bytes of R/W memory
+Packet RX   | 4096 - 4111 | 1000 - 100F   | R  | Received packet, 16 bytes
+Packet TX   | 4112 - 4127 | 1010 - 101F   | W  | Transmit packet, 16 bytes
+Profile ROM | 4128 - 8191 | 1020 - 1FFF   | R  | Profile settings received over BLE
+Program RAM | 8192 - 9215 | 2000 - 23FF   | RW | Program RAM, 1024 bytes
 
-The store and fetch commands can store or fetch values from 64 slots. These
-slots are the equivalent of global variables.
+Note that program RAM is written and read from address base 0X2000, but is
+executed at address 0. This is so that accesses to scratch RAM, and
+branch/call targets can be encoded cheaply.
 
-PacketData:
+#### Packet data:
 
 There is space for a packet of data to be sent, and a packet of data to be
 received. Each packet is exactly 16 bytes long. All bytes are sent or
 received.
 
-Thus, there are two 16 byte areas. One for TX and one for RX. The PS opcode is
-used to write ('store') to the TX packet area, and the PF opcode is used to
-read ('fetch') from the RX packet area. The RX packet area is read only, and
-the TX packet area is write only.
+The RX packet area is read only, and the TX packet area is write only.
 
 The TXP opcode sends the contents of the TX packet area. 
 
 The RXP? opcode checks to see if there is a packet available, and copies it
 into the RX area if so. It returns 1 if there is a new packet, else zero.
 
-The IO Region:
+#### The IO Region
 
-This is the region used to control and respond to the espresso machine.
+This is the region used to control and respond to the espresso machine. It is
+adjacent to the main memory map in that it is only accessible using the IOR,
+IOW, and IORT opcodes.
 
 Doing a IOR reads a sensor value, or the current state of the machine. IOW
 commands a state or asks that a sensor value be targeted.
@@ -349,19 +356,20 @@ slots that make no sense will halt your program. Writing an out of range value
 will silently clamp the value to the allowed range, and you'll be able to see
 this clamping if you use IORT to read back your write.
 
-Current IO consts defined:
+The currently defined IO consts are:
 
-0 : Pressure (IO_Pressure)
-1 : Shower head temperature
-2 : Group head temperature
-3 : Group inlet temperature
-4 : Estimated flow
-5 : Estimated volume since start of shot
-6 : Number of seconds since start of shot
-7 : Number of seconds since start of frame
-8 : End shot. (Write 1 to this to end a shot)
+Value | Name          | RWT | Use
+------|---------------|-----|----
+0 | IO_Pressure       | RWT | Pressure
+1 | IO_Flow           | RWT | Flow
+2 | IO_ShowerTemp     | RWT | Shower Temp
+3 | IO_GroupMetalTemp | RWT | Group head temperature
+4 | IO_GroupInletTemp | RWT | Fluid temperature at the group head inlet
+5 | IO_Vol            | RWT | Estimated volume since start of shot
+6 | IO_NumSeconds     | RWT | Time since start of shot
+7 | IO_ReportedState  | RWT | Substate we last reported
 
-The Profile Region:
+#### The Profile Region
 
 This is a read-only view on the profile data sent over BLE to the machine, for
 current normal and advanced profiles. The FROTH script may opt to read from
@@ -385,7 +393,7 @@ There are a few reserved words. All opcodes, and ":" and ";".
 
 "{Label}" means define a point that can be branched to.
 
-"<Tag>" adds debug information for the debugger. It provides a symbolic name
+"&lt;Tag&gt;" adds debug information for the debugger. It provides a symbolic name
 for the ToS. The CPU never sees this, but the Delgona debugger sees this
 information so that it can describe the stack better for you.
 
@@ -398,6 +406,7 @@ Comments start with "//". The compiler ignores them.
 Here is a (NOW OBSOLETE) example. Some features have changed, and others have
 been added. It's still fairly close though:
 
+```
 Program("Simple flat 9 bar 30s 92.5C shot", 500, 120)
 
 : SetPressure  // Define word "SetPressure" to set the machine pressure
@@ -421,7 +430,7 @@ Program("Simple flat 9 bar 30s 92.5C shot", 500, 120)
 : SecsReached    // Return 1 if we've reached the given number of seconds
   GetSeconds     // x secs   Get the number of seconds elapsed
   SWAP           // secs x   Swap x and seconds
-  TGE            // (secs>=x) 1 if seconds > x, else 0
+  TGE            // (secs&gt;=x) 1 if seconds &gt; x, else 0
   ; // Return 1 if we've reached the end of the shot
 
 : EndTheShot // Tell the DE1 to stop
@@ -440,9 +449,10 @@ Program("Simple flat 9 bar 30s 92.5C shot", 500, 120)
   NotDoneYet BZ   // Jump to label if seconds not reached
   EndTheShot      // Tell DE1 to stop
 
-
+```
 Note that this could have been written as follows, with no change in meaning:
   
+```
 Program("Simple flat 9 bar 30s 92C shot", 500, 120)
 
 : SetPressure IO_Pressure IOW ;
@@ -460,16 +470,16 @@ Program("Simple flat 9 bar 30s 92C shot", 500, 120)
   30 SecsReached   // Returns 1 if seconds reached, else zero
   BZ NotDoneYet    // Jump to label if seconds not reached
   EndTheShot       // Tell DE1 to stop
-
+```
 This program takes around 40 bytes of memory in total.
 
 Adding Features for Debugging
 -----------------------------
 
 The extended debugging format for a word will look like this:
-
+```
 :(SLength -- ReachedBool) SecsReached
-
+```
 Everything in the brackets is used to create debug information for the
 debugger. In the debugger, the different stack positions will use the names
 given, during single step debugging. The compiled code will not use the extra
@@ -478,13 +488,13 @@ information.
 Also, the programmer can insert tags anywhere, and they are used to describe the ToS.
 
 For example:
-
+```
 : GetSeconds     // Get number of seconds elapsed since start of shot
   IO_NumSeconds  // Put constant referring to number of seconds since start of shot on stack
   IOR            // Read number of seconds
-  <Seconds>
+  &lt;Seconds&gt;
   ; 
-
+```
 The debugger will call the stack element associated with the return value from
 this word "Seconds". THe CPU will be completely unaware of this, as none of
 this information is passed to it. This is just extra information for human
@@ -495,21 +505,27 @@ Binary Format
 
 The binary format will be as follows. All numbers are little endian.
 
-0000 - 0003 : 'EFVM'
-0004 - 0005 : Version. U16. 0 for this layout
-0006 - 0007 : MaxVol (ml),  1 - 1024
-0008 - 0009 : MaxSec ( s),  1 - 600
-000A - 000B : ROM Start. The start of the program ROM, as a byte offset into the file.
-000C - 000D : Vector: SHOT : Start address for execution of a shot. 0 means not used.
-000E - 000F : Vector: IDLE : Called to set group and preheat temps. 0 means not used.
-0010 - 0011 : Vector: HALT : Called to cleanup a shot if an error occurs. 0 means not used.
-xxxx - xxxx : Length of program ROM in bytes.
-000E - xxxx : Program ROM
+Address     | Use
+------------| ---
+0000 - 0003 | 'EFVM'
+0004 - 0005 | Version. U16. 0 for this layout
+0006 - 0007 | MaxVol (ml),  1 - 1024
+0008 - 0009 | MaxSec ( s),  1 - 600
+000A - 000B | ROM Start. The start of the program ROM, as a byte offset into the file.
+000C - 000D | Vector: SHOT : Start address for execution of a shot. 0 means not used.
+000E - 000F | Vector: IDLE : Called to set group and preheat temps. 0 means not used.
+0010 - 0011 | Vector: HALT : Called to cleanup a shot if an error occurs. 0 means not used.
+xxxx - xxxx | Length of program ROM in bytes.
+000E - xxxx | Program ROM
 
+# TODO
 
+These are things I am working on.
 
-<!-- Markdeep footer -->
-    <style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
-    <script src="markdeep.min.js"></script>
-    <script src="https://casual-effects.com/markdeep/latest/markdeep.min.js"></script>
-    <script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>
+  * Move all store and fetch operations to the same memory space.
+
+<!-- Markdeep: -->
+<style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
+<script src="markdeep.min.js" charset="utf-8"></script>
+<script src="https://morgan3d.github.io/markdeep/latest/markdeep.min.js" charset="utf-8"></script>
+<script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>
