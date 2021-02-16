@@ -93,9 +93,9 @@ class Scanner(object):
    start = [
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  4,  0,  0,  0,  0,  2,  0, 15, 19, 18, 14, 26,  1, 20,
+     0,  1,  4,  0,  0,  0,  0,  2,  0, 15, 19, 18, 14, 26,  1, 20,
     11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 28, 21, 24,  0, 25,  0,
-     0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
     27,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  1,  0,  1,
      0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
      1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 22,  0, 23,  0,  0,
@@ -237,9 +237,10 @@ class Scanner(object):
             self.t.kind = Scanner.noSym      # NextCh already done
             done = True
          elif state == 1:
-            if (self.ch == '.'
+            if (self.ch == '!'
+                 or self.ch == '.'
                  or self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch >= '@' and self.ch <= '['
                  or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'z'):
@@ -410,9 +411,10 @@ class Scanner(object):
                self.t.kind = 22
                done = True
          elif state == 27:
-            if (self.ch == '.'
+            if (self.ch == '!'
+                 or self.ch == '.'
                  or self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch >= '@' and self.ch <= '['
                  or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'q'
@@ -438,9 +440,10 @@ class Scanner(object):
                self.t.kind = 12
                done = True
          elif state == 29:
-            if (self.ch == '.'
+            if (self.ch == '!'
+                 or self.ch == '.'
                  or self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch >= '@' and self.ch <= '['
                  or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'n'
@@ -458,9 +461,10 @@ class Scanner(object):
                self.CheckLiteral()
                return self.t
          elif state == 30:
-            if (self.ch == '.'
+            if (self.ch == '!'
+                 or self.ch == '.'
                  or self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch >= '@' and self.ch <= '['
                  or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'f'
@@ -478,9 +482,10 @@ class Scanner(object):
                self.CheckLiteral()
                return self.t
          elif state == 31:
-            if (self.ch == '.'
+            if (self.ch == '!'
+                 or self.ch == '.'
                  or self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch >= '@' and self.ch <= '['
                  or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'q'
@@ -498,9 +503,10 @@ class Scanner(object):
                self.CheckLiteral()
                return self.t
          elif state == 32:
-            if (self.ch == '.'
+            if (self.ch == '!'
+                 or self.ch == '.'
                  or self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch >= '@' and self.ch <= '['
                  or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'b' and self.ch <= 'z'):
@@ -517,9 +523,10 @@ class Scanner(object):
                self.CheckLiteral()
                return self.t
          elif state == 33:
-            if (self.ch == '.'
+            if (self.ch == '!'
+                 or self.ch == '.'
                  or self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch >= '@' and self.ch <= '['
                  or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'l'
@@ -537,9 +544,10 @@ class Scanner(object):
                self.CheckLiteral()
                return self.t
          elif state == 34:
-            if (self.ch == '.'
+            if (self.ch == '!'
+                 or self.ch == '.'
                  or self.ch >= '0' and self.ch <= '9'
-                 or self.ch >= 'A' and self.ch <= '['
+                 or self.ch >= '@' and self.ch <= '['
                  or self.ch == ']'
                  or self.ch == '_'
                  or self.ch >= 'a' and self.ch <= 'z'):

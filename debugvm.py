@@ -140,8 +140,11 @@ def callback_size_prefs(sender, data):
       clamped=True
       )
 
-def callback_load_exe(sender, data):
+def cb_load_data(sender, data):
   print(sender, data)
+
+def callback_load_debug(sender, data):
+  open_file_dialog(callback=cb_load_data, extensions = ".debug") # Works great
 
 def update_cpu_views():
   if "CallStack" in Windows:
@@ -571,12 +574,12 @@ def setup_UI(sender, data):
   global CharH
 
   x, y = get_item_rect_size("CharRuler")
-  print(x,y)
+  #print(x,y)
   CharW = float(x/100)
   CharH = float(y/10)
 
-  print(f"Character width  is: {CharW}")
-  print(f"Character height is: {CharH}")
+  #print(f"Character width  is: {CharW}")
+  #print(f"Character height is: {CharH}")
   delete_item("CharRuler")
 
   add_controls()
@@ -586,6 +589,7 @@ def setup_UI(sender, data):
   add_cpu_info(VMCPU, "CPUInfo")
 
   VMCPU.loadDebug('froths/Flat9.debug')
+  VMCPU.moveToWord("RunShot")
   update_cpu_views()
 
 
@@ -611,7 +615,7 @@ def main():
   with window("Main Window", label="Espresso Forth Debugger", width=160, height=120, on_close=cb_close):
     with menu_bar("MenuBar"):
       with menu("File"):
-        add_menu_item("Load Exe", callback=callback_load_exe)
+        add_menu_item("Load Debug", callback=callback_load_debug)
 
       with menu("Windows"):
         add_menu_item("Save Layout", label="Save Layout", callback=cb_save_ui)

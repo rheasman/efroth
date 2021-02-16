@@ -11,6 +11,12 @@ def toF32(x):
   #print(x)
   return struct.unpack('f', struct.pack('f', float(x)))[0]
 
+def toFBytes(x):
+  return struct.pack('<f', x)
+
+def floatFromBytes(x):
+  return struct.unpack('<f', x)[0]
+
 class F32Stack:
   """
   A stack implemented on top of a deque, so we can
@@ -179,8 +185,17 @@ class DE1Sim:
 class VMCPUException(Exception):
   pass
 
+class VMCPUMemAccessError(VMCPUException):
+  pass # Read/Write to bad address
+  
+class VMCPUInvalidWrite(VMCPUMemAccessError):
+  pass # Write to invalid address
+
+class VMCPUInvalidRead(VMCPUMemAccessError):
+  pass # Read from invalid address
+
 class VMCPUInfo(VMCPUException):
-  pass
+  pass # Informational exceptions. Mostly used by debugger.
 
 class VMCPUBreakpoint(VMCPUInfo):
   pass
@@ -201,6 +216,18 @@ class StackOverflow(StackError):
   pass
 
 class CPU:
+  Opcodes = OpCodes()
+  OpMap = {
+    '+'  : 'PLUS',
+    '-'  : 'MINUS',
+    '*'  : 'TIMES',
+    '/'  : 'DIV',
+    ';'  : 'RET',
+    '!'  : 'STORE',
+    '@'  : 'FETCH',
+    '!B' : 'STOREB',
+    '@B' : 'FETCHB'
+  }
   def __init__(self, systime):
     self.SysTime = systime
     self.Sim = DE1Sim(systime)
@@ -208,21 +235,8 @@ class CPU:
     self.CallStack = F32Stack(64, self.stackErrorOCB, self.stackErrorUCB)
     self.Stack = F32Stack(64, self.stackErrorOCB, self.stackErrorUCB)
     self.ControlStack = F32Stack(64, self.stackErrorOCB, self.stackErrorUCB)
-    self.PC = 0
-    self.Cycles = 0
-    self.Globals = array.array('f', [0.0]*64)
-    self.RXPacket = array.array('B', [0]*16)
-    self.TXPacket = array.array('B', [0]*16)
-    self.Opcodes = OpCodes()
-    self.OpMap = {
-      '+' : 'PLUS',
-      '-' : 'MINUS',
-      '*' : 'TIMES',
-      '/' : 'DIV',
-      ';' : 'RET'
-    }
-    self.BreakPoints = set()
-    self.Stopped = False
+
+    self.reset()
 
   # def loadRaw(self, filename):
   #   f = open(filename, 'rb')
@@ -234,11 +248,21 @@ class CPU:
   #   self.PC = 21
 
   def reset(self):
-    self.PC = self.D.Words["RunShot"][1]
+    self.Scratch = array.array('B', [0]*256)
+    self.RXPacket = array.array('B', [0]*16)
+    self.TXPacket = array.array('B', [0]*16)
+
+    self.PC = 0
     self.Cycles = 0
     self.Stopped = 0
     self.Stack.reset()
     self.CallStack.reset()
+    self.BreakPoints = set()
+    self.Stopped = False
+
+    # Store the symbols of addresses written to, in format (addrsymbol, datasymbol, type).
+    # Type is float or byte, 'f' or 'b'
+    self.MemAddrSymbols = {} 
 
   def moveToWord(self, word):
     if word in self.D.Words:
@@ -363,6 +387,99 @@ class CPU:
 
   def ioRead(self, x):
     self.Stack.push(self.Sim.ioRead(x))
+
+
+  def memStore(self, val, addr):
+    addri = int(round(addr.float))
+    if addri < 0x100:
+      # Write to scratch
+      self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'f')
+      self.Scratch[addri:addri+4] = array.array('B', toFBytes(val.float))
+      return
+
+    if (addri >= 0x1010) and (addri < 0x1020):
+      # Write to packet TX
+      self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'f')
+      self.TXPacket[addri:addri+4] = toFBytes(val.float)
+      return
+
+    if (addri >= 0x2000) and (addri < 0x2400):
+      # Write directly into program RAM
+      self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'f')
+      addri = addri - 0x2000
+      self.ROM[addri:addri+4] = toFBytes(val.float)
+      return
+
+    raise VMCPUInvalidWrite('Write to invalid address')
+
+  def memStoreB(self, val, addr):
+    addri = int(round(addr.float))
+    if addri < 0x100:
+      # Write to scratch
+      self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'b')
+      self.Scratch[addri] = int(round(val.float))
+      return
+
+    if (addri >= 0x1010) and (addri < 0x1020):
+      # Write to packet TX
+      self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'b')
+      self.TXPacket[addri] = int(round(val.float))
+      return
+
+    if (addri >= 0x2000) and (addri < 0x2400):
+      # Write directly into program RAM
+      self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'b')
+      addri = addri - 0x2000
+      self.ROM[addri] = int(round(val.float))
+      return
+
+    raise VMCPUInvalidWrite('Write to invalid address')
+
+  def memFetch(self, addr):
+    addri = int(round(addr.float))
+    if addri < 0x0100:
+      # Read from scratch
+      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      f = floatFromBytes(self.Scratch[addri:addri+4])
+      return SEntry(f, vals)
+
+    if (addri >= 0x1000) and (addri < 0x1010):
+      # Read from packet RX
+      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      f = floatFromBytes(self.RXPacket[addri:addri+4])
+      return SEntry(f, vals)
+
+    if (addri >= 0x2000) and (addri < 0x2400):
+      # Read directly from program RAM
+      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      addri = addri - 0x2000
+      f = floatFromBytes(self.ROM[addri:addri+4])
+      return SEntry(f, vals)
+
+    raise VMCPUInvalidWrite('Write to invalid address')
+
+  def memFetchB(self, addr):
+    addri = int(round(addr.float))
+    if addri < 0x0100:
+      # Read from scratch
+      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      f = float(self.Scratch[addri])
+      return SEntry(f, vals)
+
+    if (addri >= 0x1000) and (addri < 0x1010):
+      # Read from packet RX
+      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      f = float(self.RXPacket[addri])
+      return SEntry(f, vals)
+
+    if (addri >= 0x2000) and (addri < 0x2400):
+      # Read directly from program RAM
+      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      addri = addri - 0x2000
+      f = float(self.ROM[addri])
+      return SEntry(f, vals)
+
+    raise VMCPUInvalidWrite('Write to invalid address')
 
   """
   OPCODES START HERE
@@ -569,28 +686,20 @@ class CPU:
   def STORE(self):
     # STORE x y -- [y] = x   : Store x in slot y.
     x, y = self.Stack.pop2()
-    self.Globals[y] = x
+    self.memStore(x, y)
 
   def FETCH(self):
     # FETCH y -- [y]         : Fetch a value from slot y, put it on the stack.
     y = self.Stack.pop()
-    self.Stack.push(self.Globals[y])
+    self.Stack.push(self.memFetch(y))
 
-  def PS(self):
-    # PS    x y -- [y] = x   : Convert x to a single byte and store it at packet offset y.
+  def STOREB(self):
     x, y = self.Stack.pop2()
-    xi = int(round(x))
-    yi = int(round(y))
-    res = SEntry(xi, f"{x.symbol}")
-    self.TXPacket[y] = res
+    self.memStoreB(x, y)
 
-  def PF(self):
-    # PF    y -- [y]         : Load a single byte from position y in the packet store.
+  def FETCHB(self):
     y = self.Stack.pop()
-    yi = int(round(y))
-    xi = self.RXPacket[y]
-    res = SEntry(xi, f"{xi}")    
-    self.Stack.push(res)
+    self.Stack.push(self.memFetchB(y))
 
   def TXP(self):
     # TXP     -- x           : Send a packet if possible. Return 1 if sent, 0 if dropped.
