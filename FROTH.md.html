@@ -380,22 +380,23 @@ The FROTH Language
 
 Your job as the programmer is to define the words that will be executed.
 
-Each program will start with "Program(Name, MaxVol, MaxSecs)". MaxVol and
-MaxSecs are safety limits that the DE1 will not let the program exceed.
+Each program will start with `"Program(Name, MaxVol, MaxSecs)"`. `MaxVol` and
+`MaxSecs` are safety limits that the DE1 will not let the program exceed.
 
-There are a few reserved words. All opcodes, and ":" and ";".
+There are a few reserved words. All opcodes, and `":"` and `";"`.
 
-":" means define a word.
+__:__ means define a word.
 
-";" means compile a word and add it to the dictionary.
+__;__ means compile a word and add it to the dictionary.
 
-";(" is the same as ";", but used to add extra information for debugging.
+__;(__ is the same as ";", but adds extra information for debugging.
 
-"{Label}" means define a point that can be branched to.
+__{Label}__ means define a point that can be branched to.
 
-"&lt;Tag&gt;" adds debug information for the debugger. It provides a symbolic name
-for the ToS. The CPU never sees this, but the Delgona debugger sees this
-information so that it can describe the stack better for you.
+Angle bracket tags (for example `<Name>`) add debug information for the
+debugger. They provide a symbolic name for the ToS. The CPU never sees this,
+but the Delgona debugger sees this information so that it can describe the
+stack better for you.
 
 Any number will be encoded using the shortest appropriate IMM opcode.
 
@@ -450,8 +451,8 @@ Program("Simple flat 9 bar 30s 92.5C shot", 500, 120)
   EndTheShot      // Tell DE1 to stop
 
 ```
+
 Note that this could have been written as follows, with no change in meaning:
-  
 ```
 Program("Simple flat 9 bar 30s 92C shot", 500, 120)
 
@@ -473,8 +474,7 @@ Program("Simple flat 9 bar 30s 92C shot", 500, 120)
 ```
 This program takes around 40 bytes of memory in total.
 
-Adding Features for Debugging
------------------------------
+## Adding Features for Debugging
 
 The extended debugging format for a word will look like this:
 ```
