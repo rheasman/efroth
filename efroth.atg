@@ -8,6 +8,8 @@ COMPILER EFroth
    IO = ioconsts.IOConsts()
    WordCnt = 0
    Words = collections.OrderedDict()
+   Globals = collections.OrderedDict()
+   GlobalCnt = 0
    WordList = []
    Labels = {}
    Addr = 0
@@ -39,6 +41,14 @@ COMPILER EFroth
         return wordstr
       else:
         self.SemErr(f"'{wordstr}' already defined: ")
+
+   def addGlobal(self, gstr):
+     if gstr not in self.Globals:
+       self.Globals[gstr] = self.GlobalCnt
+       print("GLOBAL: %s" % gstr)
+       self.GlobalCnt += 1
+     else:
+       self.SemErr(f"'{gstr}' already defined: ")       
 
    def addLabel(self, label):
      labelname = self.WordList[-1] + '::' + label
@@ -74,6 +84,11 @@ COMPILER EFroth
       if labelname in self.Labels:
         laddr = self.Labels[labelname]
         self.emitVal(laddr, comment = "// %s" % labelname)
+        return
+
+      # Maybe it's a global
+      if wordstr in self.Globals:
+        self.emitVal(self.Globals[wordstr], comment = "// %s" % wordstr)
         return
 
       self.SemErr(f"Didn't know what to do with: '{wordstr}'. It's not an opcode, word, known constant, or label." )  
@@ -235,9 +250,11 @@ PRODUCTIONS
                           ")" 
                           Program                 (. self.checkWords() .)
                           .                       
-  Program              = {
-                          Word
-                          }
+  Global               = "Global"
+                          identifier              (. self.addGlobal(self.token.val) .)
+                          .
+  Program              =  { Global }
+                          { Word }
                           .
 
   Word                 = SYNC

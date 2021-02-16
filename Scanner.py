@@ -88,8 +88,8 @@ class Scanner(object):
    eofSym  = 0
 
    charSetSize = 256
-   maxT = 31
-   noSym = 31
+   maxT = 32
+   noSym = 32
    start = [
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -190,24 +190,26 @@ class Scanner(object):
 
    def CheckLiteral( self ):
       lit = self.t.val
-      if lit == "IF":
-         self.t.kind = 13
-      elif lit == "ELSE":
+      if lit == "Global":
+         self.t.kind = 10
+      elif lit == "IF":
          self.t.kind = 14
-      elif lit == "ENDIF":
+      elif lit == "ELSE":
          self.t.kind = 15
-      elif lit == "FOR":
+      elif lit == "ENDIF":
          self.t.kind = 16
-      elif lit == "ENDFOR":
+      elif lit == "FOR":
          self.t.kind = 17
-      elif lit == "REPEAT":
+      elif lit == "ENDFOR":
          self.t.kind = 18
-      elif lit == "ENDREPEAT":
+      elif lit == "REPEAT":
          self.t.kind = 19
-      elif lit == "WHILE":
+      elif lit == "ENDREPEAT":
          self.t.kind = 20
-      elif lit == "ENDWHILE":
+      elif lit == "WHILE":
          self.t.kind = 21
+      elif lit == "ENDWHILE":
+         self.t.kind = 22
 
 
    def NextToken( self ):
@@ -369,34 +371,34 @@ class Scanner(object):
             self.t.kind = 9
             done = True
          elif state == 16:
-            self.t.kind = 10
-            done = True
-         elif state == 17:
             self.t.kind = 11
             done = True
-         elif state == 18:
-            self.t.kind = 23
+         elif state == 17:
+            self.t.kind = 12
             done = True
-         elif state == 19:
+         elif state == 18:
             self.t.kind = 24
             done = True
-         elif state == 20:
+         elif state == 19:
             self.t.kind = 25
             done = True
-         elif state == 21:
+         elif state == 20:
             self.t.kind = 26
             done = True
-         elif state == 22:
+         elif state == 21:
             self.t.kind = 27
             done = True
-         elif state == 23:
+         elif state == 22:
             self.t.kind = 28
             done = True
-         elif state == 24:
+         elif state == 23:
             self.t.kind = 29
             done = True
-         elif state == 25:
+         elif state == 24:
             self.t.kind = 30
+            done = True
+         elif state == 25:
+            self.t.kind = 31
             done = True
          elif state == 26:
             if (self.ch >= '0' and self.ch <= '9'):
@@ -408,7 +410,7 @@ class Scanner(object):
                self.NextCh()
                state = 17
             else:
-               self.t.kind = 22
+               self.t.kind = 23
                done = True
          elif state == 27:
             if (self.ch == '!'
@@ -437,7 +439,7 @@ class Scanner(object):
                self.NextCh()
                state = 16
             else:
-               self.t.kind = 12
+               self.t.kind = 13
                done = True
          elif state == 29:
             if (self.ch == '!'
