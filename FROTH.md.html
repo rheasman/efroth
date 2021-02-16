@@ -157,12 +157,9 @@ CALL   |x                | Execute word x.
 WAIT   |                 | Sleep until the start of the next AC cycle.
 NOP    |                 | Does nothing.
        |||
-TOR    |x  --            | Pop x and push to Call Stack
+TOR    |x  --            | Pop x and push to Call Stack (aka Return stack aka Control Stack)
 FROMR  |-- x             | Pop from Call stack and push to ToS
-       |||
-TOC    |x  --            | Pop x and push to Control Stack
-FROMC  |-- x             | Pop from Control Stack and push to ToS
-COPYC  |-- x             | Push a copy of Control Stack ToS to ToS
+COPYR  |-- x             | Push a copy of Call Stack ToS to ToS
        |||
 PCIMMS |# -- x          | Push PC + # onto the stack.
 IMM    |# -- x          | Push an immediate value from (0..127) onto the stack.

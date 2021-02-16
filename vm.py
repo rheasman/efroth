@@ -667,6 +667,21 @@ class CPU:
     # NOP                    : Does nothing.
     pass
 
+  def TOR(self):
+    # TOR    |x  --            | Pop x and push to Call Stack (aka Return stack aka Control Stack)
+    x = self.Stack.pop()
+    self.CallStack.push(x)
+
+  def FROMR(self):
+    # FROMR  |-- x             | Pop from Call stack and push to ToS
+    x = self.CallStack.pop()
+    self.Stack.push(x)
+
+  def COPYR(self):
+    # COPYR  |-- x             | Push a copy of Call Stack ToS to ToS
+    x = self.CallStack.read(0)
+    self.Stack.push(x)
+
   def PCIMMS(self, imm, symbol=''):
     # PCIMMS # -- x          : Push PC + # onto the stack.
     x = self.PC + imm - 1    # PC has been pre-incremented, so subract 1
