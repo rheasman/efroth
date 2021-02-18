@@ -121,6 +121,9 @@ class DebugDis:
     if opname == "IMMS":
       return (self.MemBytes[addr+1]) - 128
 
+    if opname == "PCIMMS":
+      return (self.MemBytes[addr+1]) - 128 + addr
+
     if opname == "IMMS":
       return (self.MemBytes[addr+1]) - 128
 

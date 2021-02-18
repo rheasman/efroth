@@ -126,6 +126,8 @@ DROP   |x y -- x         | Discard TOS.
 OVER   |x y -- x y x     | Duplicates the value at TOS-1. (Call twice to duplicate both values)
 SWAP   |x y -- y x       | Swap x and y.
 COPY   |x -- Stack[-x]   | Copy a value out of the stack at position TOS - x, to TOS. 0 is the item before x
+ROT    |a b c -- b c a   | Rotate top 3 values of stack around
+NROT   |a b c -- c a b   | Rotate top 3 values of stack around (the other way)
        |||
 +      |x y -- (x+y)     | Add x and y.
 -      |x y -- (x-y)     | Subtract y from x.
@@ -153,13 +155,14 @@ BZ     |x a --           | Branch to a if x == 0.
 BRA    |a   --           | Branch to a.
        |||
 CALL   |x                | Execute word x.
-;      |                 | Returns to calling word.
+;      |                 | Returns to calling word. Use at end of word only.
+EXIT   |                 | Returns to calling word. Use in middle of words, only.
 WAIT   |                 | Sleep until the start of the next AC cycle.
 NOP    |                 | Does nothing.
        |||
-TOR    |x  --            | Pop x and push to Call Stack (aka Return stack aka Control Stack)
-FROMR  |-- x             | Pop from Call stack and push to ToS
-COPYR  |-- x             | Push a copy of Call Stack ToS to ToS
+TOR    |x  --            | Pop x and push to Return Stack
+FROMR  |-- x             | Pop from Return Stack and push to ToS
+COPYR  |-- x             | Push a copy of Return Stack ToS to ToS
        |||
 PCIMMS |# -- x          | Push PC + # onto the stack.
 IMM    |# -- x          | Push an immediate value from (0..127) onto the stack.
@@ -170,8 +173,8 @@ IMMF   |# -- x          | Push an immediate single-precision float (32-bit) onto
 !      |x y -- [y] = x       | Store x at address y.
 @      |y   -- [y]             | Fetch a value from address y, put it on the stack.
        |||
-!8     |x y -- [y] = x   | Convert x to a single byte and store it at address y.
-@8     |y -- [y]         | Load a single byte from position y in the packet store.
+!B     |x y -- [y] = x   | Convert x to a single byte and store it at address y.
+@B     |y -- [y]         | Load a single byte from position y in the packet store.
        |||
 TXP    |-- x           | Send a packet if possible. Return 1 if sent, 0 if dropped.
 RXP?   | -- x           | Return 1 if a packet arrived, else zero. PacketData RX area is not modified until this is called.

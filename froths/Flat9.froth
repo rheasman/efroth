@@ -1,5 +1,8 @@
 Program("Simple flat 9 bar 30s 92C shot", 500, 120)
 
+Global CurrentFrame
+Global LastSecs
+
 // Define word "SetPressure" to set the machine pressure
 : SetPressure  
   IO_Pressure  // Put constant referring to Pressure on stack
@@ -37,33 +40,25 @@ Program("Simple flat 9 bar 30s 92C shot", 500, 120)
   20 1 0 FOR
     6 1 0 FOR
       WAIT
-      0 INDEX
-      1 INDEX
-      DROP
-      DROP
-    ENDFOR
-  
-    1
-    IF
-      10
-    ELSE
-      11
-    ENDIF
-    DROP
+    ENDFOR  
   ENDFOR
 ;  
 
-: TestMath // Check to see how math looks in the symbolic debugger
-  GetSeconds 5 <A> +
-  7 <B> 9 <C> -
-  *
-  3.5
-  /
+: TestMem
+  10 0 !
+  0 @
+  10 3 !B
+  3 @B
+  <Thing>
+
 ;
 
 // Define the actual shot
 : RunShot
-  TestMath
+  CurrentFrame @
+  10 +
+  LastSecs !
+  TestMem
   92.5 SetTemp    // Set group temperature to 92 deg C
   9 SetPressure   // Set the pressure target
 {NotDoneYet}      // Define a label

@@ -226,7 +226,7 @@ class CPU:
     '!'  : 'STORE',
     '@'  : 'FETCH',
     '!B' : 'STOREB',
-    '@B' : 'FETCHB'
+    '@B' : 'FETCHB',
   }
   def __init__(self, systime):
     self.SysTime = systime
@@ -235,6 +235,9 @@ class CPU:
     self.CallStack = F32Stack(64, self.stackErrorOCB, self.stackErrorUCB)
     self.Stack = F32Stack(64, self.stackErrorOCB, self.stackErrorUCB)
     self.ControlStack = F32Stack(64, self.stackErrorOCB, self.stackErrorUCB)
+    self.Scratch = array.array('B', [0]*256)
+    self.RXPacket = array.array('B', [0]*16)
+    self.TXPacket = array.array('B', [0]*16)
 
     self.reset()
 
@@ -248,9 +251,7 @@ class CPU:
   #   self.PC = 21
 
   def reset(self):
-    self.Scratch = array.array('B', [0]*256)
-    self.RXPacket = array.array('B', [0]*16)
-    self.TXPacket = array.array('B', [0]*16)
+    self.memClear()
 
     self.PC = 0
     self.Cycles = 0
@@ -259,10 +260,19 @@ class CPU:
     self.CallStack.reset()
     self.BreakPoints = set()
     self.Stopped = False
+    self.MemWriteList = []
 
     # Store the symbols of addresses written to, in format (addrsymbol, datasymbol, type).
     # Type is float or byte, 'f' or 'b'
     self.MemAddrSymbols = {} 
+
+  def memClear(self):
+    for i in range(256):
+      self.Scratch[i] = 0
+
+    for i in range(16):
+      self.TXPacket[i] = 0      
+      self.RXPacket[i] = 0      
 
   def moveToWord(self, word):
     if word in self.D.Words:
@@ -293,6 +303,12 @@ class CPU:
       return "IMM"
 
     return self.Opcodes.OPCODENAME[opcode]
+
+  def getMemWriteList(self):
+    return self.MemWriteList
+
+  def clearMemWriteList(self):
+    self.MemWriteList = []
 
   def getCurrentOpcodeName(self):
     opcode = self.ROM[self.PC]
@@ -388,19 +404,20 @@ class CPU:
   def ioRead(self, x):
     self.Stack.push(self.Sim.ioRead(x))
 
-
   def memStore(self, val, addr):
     addri = int(round(addr.float))
     if addri < 0x100:
       # Write to scratch
       self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'f')
       self.Scratch[addri:addri+4] = array.array('B', toFBytes(val.float))
+      self.MemWriteList.append((addri, 4))
       return
 
     if (addri >= 0x1010) and (addri < 0x1020):
       # Write to packet TX
       self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'f')
       self.TXPacket[addri:addri+4] = toFBytes(val.float)
+      self.MemWriteList.append((addri, 4))
       return
 
     if (addri >= 0x2000) and (addri < 0x2400):
@@ -408,6 +425,7 @@ class CPU:
       self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'f')
       addri = addri - 0x2000
       self.ROM[addri:addri+4] = toFBytes(val.float)
+      self.MemWriteList.append((addri, 4))
       return
 
     raise VMCPUInvalidWrite('Write to invalid address')
@@ -418,12 +436,14 @@ class CPU:
       # Write to scratch
       self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'b')
       self.Scratch[addri] = int(round(val.float))
+      self.MemWriteList.append((addri, 1))
       return
 
     if (addri >= 0x1010) and (addri < 0x1020):
       # Write to packet TX
       self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'b')
       self.TXPacket[addri] = int(round(val.float))
+      self.MemWriteList.append((addri, 1))
       return
 
     if (addri >= 0x2000) and (addri < 0x2400):
@@ -431,27 +451,47 @@ class CPU:
       self.MemAddrSymbols[addri] = (addr.symbol, val.symbol, 'b')
       addri = addri - 0x2000
       self.ROM[addri] = int(round(val.float))
+      self.MemWriteList.append((addri, 1))
       return
 
     raise VMCPUInvalidWrite('Write to invalid address')
 
-  def memFetch(self, addr):
+  def getMemAddrSymInfo(self, addri, suggestedvals=''):
+    try:
+      addrs, vals, vtype = self.MemAddrSymbols[addri]
+    except KeyError:
+      addrs = ''
+      vals = suggestedvals
+      vtype = ''
+
+    return (addrs, vals, vtype)
+
+  def concat(self, s1, s2):
+    if s1 == None:
+      s1 = ''
+    if s2 == None:
+      s1 = ' '
+      s2 = ''
+
+    return s1 + s2
+
+  def memFetch(self, addr, suggestedvals=''):
     addri = int(round(addr.float))
     if addri < 0x0100:
       # Read from scratch
-      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      addrs, vals, vtype = self.getMemAddrSymInfo(addri, suggestedvals=self.concat('@',addr.symbol))
       f = floatFromBytes(self.Scratch[addri:addri+4])
       return SEntry(f, vals)
 
     if (addri >= 0x1000) and (addri < 0x1010):
       # Read from packet RX
-      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      addrs, vals, vtype = self.getMemAddrSymInfo(addri, suggestedvals=self.concat('@',addr.symbol))
       f = floatFromBytes(self.RXPacket[addri:addri+4])
       return SEntry(f, vals)
 
     if (addri >= 0x2000) and (addri < 0x2400):
       # Read directly from program RAM
-      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      addrs, vals, vtype = self.getMemAddrSymInfo(addri, suggestedvals=self.concat('@',addr.symbol))
       addri = addri - 0x2000
       f = floatFromBytes(self.ROM[addri:addri+4])
       return SEntry(f, vals)
@@ -462,19 +502,19 @@ class CPU:
     addri = int(round(addr.float))
     if addri < 0x0100:
       # Read from scratch
-      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      addrs, vals, vtype = self.getMemAddrSymInfo(addri, suggestedvals=self.concat('@',addr.symbol))
       f = float(self.Scratch[addri])
       return SEntry(f, vals)
 
     if (addri >= 0x1000) and (addri < 0x1010):
       # Read from packet RX
-      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      addrs, vals, vtype = self.getMemAddrSymInfo(addri, suggestedvals=self.concat('@',addr.symbol))
       f = float(self.RXPacket[addri])
       return SEntry(f, vals)
 
     if (addri >= 0x2000) and (addri < 0x2400):
       # Read directly from program RAM
-      addrs, vals, vtype = self.MemAddrSymbols[addri]
+      addrs, vals, vtype = self.getMemAddrSymInfo(addri, suggestedvals=self.concat('@',addr.symbol))
       addri = addri - 0x2000
       f = float(self.ROM[addri])
       return SEntry(f, vals)
@@ -509,6 +549,24 @@ class CPU:
     # COPY  x -- Stack[-x] (0 is the item before x, etc)
     x = self.Stack.pop()
     self.Stack.push(self.Stack.read(x))
+
+  def ROT(self):
+    # ROT    |a b c -- b c a   | Rotate top 3 values of stack around
+    c = self.Stack.pop()
+    b = self.Stack.pop()
+    a = self.Stack.pop()
+    self.Stack.push(b)
+    self.Stack.push(c)
+    self.Stack.push(a)
+
+  def NROT(self):
+    # NROT    |a b c -- c a b   | Rotate top 3 values of stack around
+    c = self.Stack.pop()
+    b = self.Stack.pop()
+    a = self.Stack.pop()
+    self.Stack.push(c)
+    self.Stack.push(a)
+    self.Stack.push(b)
 
   def PLUS(self):
     # +     x y -- (x+y)
@@ -655,7 +713,12 @@ class CPU:
     self.PC = int(round(a.float))
 
   def RET(self):
-    # ;                      : Returns to calling word.
+    # ;                      : Returns to calling word. Use at end of word only.
+    a = self.CallStack.pop()
+    self.PC = int(round(a.float))
+
+  def EXIT(self):
+    # EXIT                   : Returns to calling word. Use in middle of word only.
     a = self.CallStack.pop()
     self.PC = int(round(a.float))
 

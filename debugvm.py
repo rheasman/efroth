@@ -17,6 +17,7 @@ SYSTIME = systemtime.SystemTime()
 VMCPU = CPU(SYSTIME)
 PREFS_FILE_NAME = 'prefs.debugvm.json'
 UI_FILE_NAME = 'ui.debugvm.json'
+FILETOLOAD = "froths/ShotSequencer.debug"
 
 def charW(x):
   return int(round(x*CharW))
@@ -153,9 +154,10 @@ def update_cpu_views():
     Windows["Stack"].updateDisplay()
   if "CPUInfo" in Windows:
     Windows["CPUInfo"].updateDisplay()
-
   if "Program" in Windows:
     Windows["Program"].updateDisplay()
+  if "Memory" in Windows:
+    Windows["Memory"].updateDisplay()
 
 def cb_run(sender, data):
   if "Program" not in Windows:
@@ -342,7 +344,7 @@ def add_editor():
     del Windows["Program"]
     delete_item("Program")
 
-  Windows["Program"] = Editor("froths/Flat9.debug")
+  Windows["Program"] = Editor(FILETOLOAD)
 
 def cb_add_controls(sender, data):
   add_controls()
@@ -458,6 +460,72 @@ class Editor:
                 add_text(f"opcodesym{i}", default_value=op[3])
 
 
+class MemoryDisplay:
+  def __init__(self, cpu, name):
+    self.Name = name
+    self.CPU = cpu
+    self.createDisplay()
+
+  def getFloatAddrInfo(self, a):
+    """
+    Given an address, return the value at that address, and it's symbol
+    """
+    return self.CPU.memFetch(SEntry(a, None))
+
+  def getByteAddrInfo(self, a):
+    """
+    Given an address, return the value at that address, and it's symbol
+    """
+    return self.CPU.memFetchB(SEntry(a, None))
+
+  def updateDisplay(self):
+    wl = self.CPU.getMemWriteList()
+    if len(wl):
+      for addr, writelen in wl:
+        for byteaddr in range(addr, addr+writelen):
+          val, sym = self.getByteAddrInfo(byteaddr)
+          val = int(round(val))
+          set_value(f"{self.Name}bval_{byteaddr}", "%02X %4d" % (val, val))
+          set_value(f"{self.Name}bsym_{byteaddr}", "%s" % sym)
+
+          if (byteaddr % 4) == 0:
+            val, sym = self.getFloatAddrInfo(byteaddr)
+            set_value(f"{self.Name}fval_{byteaddr}", "%12.6f" % val)
+            set_value(f"{self.Name}fsym_{byteaddr}", "%s" % sym)
+
+      self.CPU.clearMemWriteList()
+
+
+  def createDisplay(self):
+    with window(self.Name):
+      with child(f"{self.Name}child", width=charW(100), height=charH(16), border=False):
+        with managed_columns(f"{self.Name}mc", 2):
+          with group(f"{self.Name}left"):
+            for byteaddr in range(256):
+              # 4 Bytes and a Float
+              # Horizontal double column, 4 bytes on the left, float on the right
+              with group(f"{self.Name}bline_{byteaddr}", horizontal=True):
+                val, sym = self.getByteAddrInfo(byteaddr)
+                val = int(round(val))
+                add_text(f"{self.Name}byte_{byteaddr}", default_value="%05d %04x" % (byteaddr, byteaddr))
+                add_text(f"{self.Name}bval_{byteaddr}", default_value="%02X %4d" % (val, val))
+                add_text(f"{self.Name}bsym_{byteaddr}", default_value="%s" % (sym,))
+          with group(f"{self.Name}right"):
+            for addr in range(0, 256):
+              if (addr % 4) == 0:
+                with group(f"{self.Name}fline_{addr}", horizontal=True):
+                  val, sym = self.getFloatAddrInfo(addr)
+                  #add_text(f"{self.Name}float_{addr}", default_value="%05d %04x" % (addr, addr))
+                  add_text(f"{self.Name}fval_{addr}", default_value="%12.6f" % (val,))
+                  add_text(f"{self.Name}fsym_{addr}", default_value="%s" % (sym,))
+              else:
+                with group(f"{self.Name}spacerg_{addr}", horizontal=True):
+                  add_text(f"{self.Name}spacerl_{addr}", default_value=' ')
+
+                
+
+
+
 
 
 class StackDisplay:
@@ -506,6 +574,13 @@ def add_stack(stack, name):
     delete_item(name)
 
   Windows[name] = StackDisplay(name, stack)
+
+def add_mem(cpu, name):
+  if does_item_exist(name):
+    del Windows[name]
+    delete_item(name)
+
+  Windows[name] = MemoryDisplay(cpu, name)
 
 class CPUInfo:
   def __init__(self, cpu, name):
@@ -587,8 +662,9 @@ def setup_UI(sender, data):
   add_stack(VMCPU.CallStack, "CallStack")
   add_stack(VMCPU.Stack, "Stack")
   add_cpu_info(VMCPU, "CPUInfo")
+  add_mem(VMCPU, "Memory")
 
-  VMCPU.loadDebug('froths/Flat9.debug')
+  VMCPU.loadDebug(FILETOLOAD)
   VMCPU.moveToWord("RunShot")
   update_cpu_views()
 

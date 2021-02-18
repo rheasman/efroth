@@ -9,12 +9,14 @@ COMPILER EFroth
    WordCnt = 0
    Words = collections.OrderedDict()
    Globals = collections.OrderedDict()
-   GlobalCnt = 0
+   GlobalLastAddr = 0
    WordList = []
+   WordStackUse = {}
    Labels = {}
    Addr = 0
    Fixups = collections.deque()
    ROM = array.array("B")
+   StackUse = (0,0)
 
    # Struct to map ROM address ranges to symbols
    DebugInfo = {}
@@ -23,17 +25,37 @@ COMPILER EFroth
    T_OPCODE = 0
    T_VAL = 1  
 
+   def updateStackUse(self, maindiff, retdiff):
+     self.StackUse = (self.StackUse[0] + maindiff, self.StackUse[1] + retdiff)
+
    def emit(self, op, otype, newop, comment=''):
       print("%5d" % self.Addr, "%6s" % op, "  ", comment)
       if op in self.Opcodes.OPCODESET:
+        self.updateStackUse(*self.Opcodes.OPCODEDICT[op])
         self.ROM.append(self.Opcodes.OPCODENUM[op])
       else:
         self.ROM.append(op)
+
+      if (op == ';') or (op == 'EXIT'):
+        print("Stack delta:", self.StackUse)
+        self.checkWordStacks()
+        currentword = self.WordList[-1]
+        self.WordStackUse[currentword] = self.StackUse
+
       self.AddrToSource[int(self.Addr)] = (newop, otype, self.token.pos, self.token.line, self.token.col, self.token.val, self.ROM[-1])
       self.Addr += 1
 
+   def checkWordStacks(self):
+      currentword = self.WordList[-1]
+      if currentword in self.WordStackUse:
+        # Check that stack use matches at all exits
+        u = self.WordStackUse[currentword]
+        if self.StackUse != u:
+          self.SemErr( f"Stack usage must be the same at all word exits. Previous = {u}, current = {self.StackUse}." )
+
    def addWord(self, wordstr):
       if wordstr not in self.Words:
+        self.StackUse = (0,0)
         self.Words[wordstr] = (self.WordCnt, self.Addr)
         self.WordList.append(wordstr)
         print(": %s" % wordstr)
@@ -44,9 +66,9 @@ COMPILER EFroth
 
    def addGlobal(self, gstr):
      if gstr not in self.Globals:
-       self.Globals[gstr] = self.GlobalCnt
+       self.Globals[gstr] = self.GlobalLastAddr
        print("GLOBAL: %s" % gstr)
-       self.GlobalCnt += 1
+       self.GlobalLastAddr += 4
      else:
        self.SemErr(f"'{gstr}' already defined: ")       
 
@@ -71,12 +93,19 @@ COMPILER EFroth
       if wordstr in self.IO.IODICT:
         # It's a defined IO constant
         self.emitVal(self.IO.IOCONSTVAL[wordstr], comment="// %s: %d" % (wordstr, self.IO.IOCONSTVAL[wordstr]))
+        diffm, diffr = (1, 0)
+
         return
 
       if wordstr in self.Words:
         waddr = self.Words[wordstr][1]
         self.emitVal(waddr, comment="// %5d %s" % (waddr, wordstr))
         self.emit("CALL", self.T_OPCODE, 1)
+        #print("Stack use before:", self.StackUse)
+        (m, r) = self.WordStackUse[wordstr]
+        self.StackUse = (self.StackUse[0]+m, self.StackUse[1]+r)
+        #print("Stack use after:", self.StackUse)
+
         return
 
       # Maybe it's a label
@@ -88,7 +117,8 @@ COMPILER EFroth
 
       # Maybe it's a global
       if wordstr in self.Globals:
-        self.emitVal(self.Globals[wordstr], comment = "// %s" % wordstr)
+        val = self.Globals[wordstr]
+        self.emitVal(val, comment = "// %s (%d)" % (wordstr, val))
         return
 
       self.SemErr(f"Didn't know what to do with: '{wordstr}'. It's not an opcode, word, known constant, or label." )  
@@ -145,6 +175,7 @@ COMPILER EFroth
         # 7-bit immediate
         # comment = "// %s %s" % (intval & 0x7F, comment)
         self.emit(0x80 | intval, self.T_VAL, 1, comment=comment)
+        self.updateStackUse(1,0)
         return
 
       if (intval >= -128) and (intval < 128):
@@ -156,7 +187,7 @@ COMPILER EFroth
       offset = intval - self.Addr
       if (offset >= -128) and (offset < 128):
         # PC-relative number
-        self.emit('PCIMM', 1)
+        self.emit('PCIMMS', self.T_OPCODE, 1)
         self.emit(offset, self.T_VAL, 0, comment=comment)
         return
 
@@ -177,6 +208,10 @@ COMPILER EFroth
        self.SemErr( "The word 'Idle' must be defined." )
      if "Halt" not in self.Words:
        self.SemErr( "The word 'Halt' must be defined." )
+
+   def checkPathsEqual(self, p1, p2):
+     if (p1[0] != p2[0]) or (p1[1] != p2[1]):
+       self.SemErr( f"Both paths through a conditional should have the same effect on stack sizes, {p1} vs {p2}" )
 
    def writeResults(self, inputfile, outputfile):
       #print(self.AddrToSource)
@@ -223,20 +258,23 @@ COMPILER EFroth
 
 CHARACTERS
   eol      = CHR(10) .
-  letter   = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_[].@!" .
+  letter   = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_[].@!&" .
   digit    = "0123456789" .
+  hexdigit = "0123456789ABCDEF" .
   noquote1 = ANY - "'" - eol .
   noquote2 = ANY - '"' - eol .
 
 TOKENS
   identifier = letter {letter | digit} .
-  number     = digit { digit} .
+  number     = digit { digit } .
+  hexnumber  = "0x" hexdigit { hexdigit } .
   negnumber  = "-" digit { digit } .
   string     =  "'" noquote1 {noquote1} "'" | '"' noquote2 {noquote2} '"' .
   float      = digit {digit} '.' digit {digit} .
   negfloat   = "-" digit {digit} '.' digit {digit} .
 
 COMMENTS FROM "//" TO eol
+COMMENTS FROM "/*" TO "*/"
 
 IGNORE  CHR(9) .. CHR(13)
 
@@ -250,13 +288,13 @@ PRODUCTIONS
                           ")" 
                           Program                 (. self.checkWords() .)
                           .                       
-  Global               = "Global"
-                          identifier              (. self.addGlobal(self.token.val) .)
-                          .
   Program              =  { Global }
                           { Word }
                           .
 
+  Global               = "Global"
+                          identifier              (. self.addGlobal(self.token.val) .)
+                          .
   Word                 = SYNC
                           AnnotatedWord
                           |
@@ -277,17 +315,24 @@ PRODUCTIONS
                           EndOfWord
                           .
   CompoundStatement    = If | For | Repeat | While | Statement .               
-  If                   = "IF"                    (. self.emitAddr(0, addfixup=True)             .)
+  If                   = "IF"                    
+                                                 (. self.emitAddr(0, addfixup=True)             .)
                                                  (. self.emitWord("BZ")                         .)
+                                                 (. stackbeforeif = self.StackUse               .)                                                                                                  
                           { CompoundStatement }
                           { 
                                                  (. tofix = self.Fixups.pop()                   .)
                                                  (. self.emitAddr(0, addfixup=True)             .)
                                                  (. self.emitWord("BRA")                        .)
+                                                 (. stackbeforeelse = self.StackUse             .)
                           "ELSE"               
                                                  (. self.doFixup(tofix, self.Addr);             .) 
-                          { CompoundStatement } }
+                                                 (. self.StackUse = stackbeforeif               .)
+                          { CompoundStatement }  
+                                                 (. self.checkPathsEqual(stackbeforeelse, self.StackUse) .)
+                          }
                           "ENDIF"                (. self.doFixup(self.Fixups.pop(), self.Addr)  .)
+                                                 (. self.StackUse = stackbeforeif               .)
                           .
   For                  = "FOR"                   (. self.startFor(); addr = self.Addr-1         .)
                           { CompoundStatement }
@@ -313,7 +358,8 @@ PRODUCTIONS
                         .
   WordDef<out name>    = identifier               (. name = self.addWord(self.token.val)        .)
                          .
-  EndOfWord            = ";"                      (. self.emit(";", self.T_OPCODE, 1) .)
+  EndOfWord            =                          (. self.emit(";", self.T_OPCODE, 1)           .)
+                         ";"
                         .
   Label                = "{"
                           identifier              (. self.addLabel(self.token.val)              .)
@@ -323,13 +369,14 @@ PRODUCTIONS
                           identifier              (. self.addTag(self.token.val)                .)
                           ">"
                           .   
-  Number               = IntOrFloat               (. self.emitVal(self.token.val, comment="// %s" % self.token.val) .)
+  Number               = IntOrFloat<out val>      (. self.emitVal(val, comment="// %s" % self.token.val) .)
                          .
 
-  IntOrFloat           = ( number
-                         | float
-                         | negnumber
-                         | negfloat
+  IntOrFloat<out val>  = ( number                 (. val = int(self.token.val, 10)              .)
+                         | hexnumber              (. val = int(self.token.val, 16)              .)
+                         | float                  (. val = float(self.token.val)                .)
+                         | negnumber              (. val = int(self.token.val, 10)              .)
+                         | negfloat               (. val = float(self.token.val)                .)
                          )
                          .
 
