@@ -1,0 +1,265 @@
+Program("Shot Sequencer for legacy profiles", 500, 120)
+Global CurrentFrame
+
+//  struct PACKEDATTR T_ShotFrame {
+//    U8P0   Flag;       // See T_E_FrameFlags
+//    U8P4   SetVal;     // SetVal is a 4.4 fixed point number, setting either pressure or flow rate, as per mode
+//    U8P1   Temp;       // Temperature in 0.5 C steps from 0 - 127.5
+//    F8_1_7 FrameLen;   // FrameLen is the length of this frame in seconds. It's a 1/7 bit floating point number as described in the F8_1_7 a struct
+//    U8P4   TriggerVal; // Trigger value. Could be a flow or pressure.
+//    U10P0  MaxVol;     // Exit current frame if the total shot volume/weight exceeds this value. 0 means ignore
+//  };
+
+:( U8P4_x -- x ) FromU8P4
+  16 /
+;
+
+// I'm starting words that fetch fields from structs with ".@"
+// This is the "." from C, and the "@" from FORTH
+// Similarly, to store into fields, I'll use ".!"
+
+:( &ShotFrame -- ShotFrame.Flag ) .@Flag
+  @B <Flag>  // Get flag byte and name it
+;
+
+:( &ShotFrame -- SetVal ) .@SetVal
+  1 + @B              // SetVal is one byte into the struct
+  FromU8P4 <SetVal>   // Convert to correct units and rename
+;
+
+:( &ShotFrame -- Temp ) .@Temp
+  2 + @B
+  2 / <Temp>
+;
+
+// Convert from F8_1_8 to float
+:( F8_1_7 -- x ) FromF8_1_7
+  DUP         // Fx Fx
+  128 AND     // Fx (higbit set?)
+  IF          // Fx
+    127 AND   // Fx & 0x7F
+  ELSE
+    10 /      // 0 high bit means range is 0 - 12.7 in steps of 0.1
+  ENDIF
+;
+
+:( &ShotFrame -- FrameLen ) .@FrameLen
+  3 + @B
+  FromF8_1_7 <FrameLen>
+;
+
+:( &ShotFrame -- TriggerVal ) .@TriggerVal
+  4 + @B
+  FromU8P4 <TriggerVal>
+;
+
+:( @ShotFrame -- MaxVol ) .@MaxVol
+  DUP 6 + @B    // get high byte
+  0x3 AND       // keep bottom 2 bits
+  256 *         // shift left 8
+  SWAP 5 + @B   // get low byte
+  OR            // OR them together
+  <MaxVol>
+;
+
+/*
+float interpolate(float width, float position, float y1, float y2) {
+  if (width < 0.001f) {
+    return y2;
+  }
+  if (position >= width) {
+      return y2;
+  }
+  float xpos = position/width;
+  return (y2*xpos + (1.0f-xpos)*y1);
+}
+*/
+
+:( y1 y2 pos width -- y ) Interpolate
+  // If values are in range, return y2*xpos + (1.0f-xpos)*y1
+
+  // Return y2 if width < 0.001 or pos >= width
+  DUP          // -- y1 y2 pos width width
+  0.001 TLT    // -- y1 y2 pos width (width < 0.001)
+  TOR          // -- y1 y2 pos width {(width < 0.001)} ie. Save result on return stack
+
+  OVER OVER    // -- y1 y2 pos width pos width
+  TGE          // -- y1 y2 pos width (pos >= width)
+  FROMR OR     // -- y1 y2 pos width ((pos >= width) or (width < 0.001))
+  IF
+    // Pos or width are out of range, so return y2
+    DROP DROP  // -- y1 y2
+    SWAP DROP  // -- y2
+    EXIT
+  ENDIF
+
+  // This is the actual interpolation
+               // -- y1 y2 pos width
+  / <xpos>     // -- y1 y2 xpos
+  SWAP         // -- y1 xpos y2
+  OVER         // -- y1 xpos y2 xpos
+  *            // -- y1 xpos (y2*xpos)
+  NROT         // -- (y2*xpos) y1 xpos  // NROT is useful to move a result out of the way
+  1 SWAP -     // -- (y2*xpos) y1 1-xpos
+  *            // -- (y2*xpos) ((1-xpos)*y1)
+  +            // -- (y2*xpos + (1-xpos)*y1)
+;
+
+// Would be nice if I could just give RPN expressions using stack pos names.
+// Like this:
+//   pos width / <xpos>
+//   y2 xpos + 1 xpos - y1 * +
+// This requires the following pairs of inputs
+//   pos width / <xpos>
+//   y2 xpos + <a>
+//   1 xpos - <b>
+//   b y1 * <c>
+//   a c + 
+// 
+// ax^2 + bx + c
+// :( a b c x -- q)
+// (a x x * * b x * + c +)
+// pick a
+// copy x
+// copy x
+// pick b
+// pick x
+// pick c
+//
+// y2 xpos * 1 xpos - y1 * +
+// pick y2
+// copy xpos
+// 1
+// pick xpos
+// pick y1
+/**
+
+To do this, the compiler will have to know how many stack entries each word
+consumes/produces. This is probably something worth having anyway as many bugs
+result in an unbalanced stack.
+
+It will also need to know if it's the last time a value is being used, so it
+can pick instead of copy. The compiler would be able to enforce that every
+word consumes/produces exactly the same number of entries no matter the
+execution path.
+
+Maybe use different letters in front of the brackets.
+
+Use( x ) means that all items referred to will be consumed.
+Copy( x ) means that all items referred to will be left alone.
+
+Or, add a suffix that means an item will be consumed. Something like ".".
+
+( a b . + ) // a b -- a (a+b)
+
+Better yet. Mark which items will be left alone using a special format:
+(a b)(a b +) // a b -- a b (a+b)
+(a  )(a b +) // a b -- a (a+b)
+
+So:
+  ()(pos width /)<xpos>
+Means:
+  Divide pos by width, and call it xpos, consume pos and width.
+
+And:
+  ()(y2 xpos * 1 xpos - y1 * +)
+Means:
+  ( y1 y2 xpos -- (y2*xpos + (1-xpos)*y1) )
+
+
+What about the first half of interpolate?
+
+  // Return y2 if width < 0.001 or pos >= width
+  DUP          // -- y1 y2 pos width width
+  0.001 TLT    // -- y1 y2 pos width (width < 0.001)
+  TOR          // -- y1 y2 pos width {(width < 0.001)} ie. Save result on return stack
+
+  OVER OVER    // -- y1 y2 pos width pos width
+  TGE          // -- y1 y2 pos width (pos >= width)
+  FROMR OR     // -- y1 y2 pos width ((pos >= width) or (width < 0.001))
+  IF
+    // Pos or width are out of range, so return y2
+    DROP DROP  // -- y1 y2
+    SWAP DROP  // -- y2
+    EXIT
+  ENDIF
+
+  // Maybe K()() to keep some items, or else copy is assumed:
+
+  (pos 0.001 <) <r1> // pos -- pos (pos < 0.001?) <r1>
+  (pos width >=) <r2> // pos width -- pos width (pos >= width) <r2>
+  (r1 r2 OR) // r1 r2 -- r1 | r2
+  IF
+    Return(y2) // Perhaps this means get rid of everything not y2 and exit
+  ENDIF
+
+  K()(y2 xpos * 1 xpos - y1 * +)
+
+  // K = Keep ?
+  // C = Copy ?
+
+
+  Lets call these () things "expressions". Can I nest them? Should I allow
+  that? I think I won't, as it can get really confusing about when to discard
+  stack entries.
+
+  I think I'll keep it simple. All expressions are copy expressions. To get
+  rid of stack entries, use either DISCARD() or KEEP().
+
+  DISCARD will remove the given items from the stack. KEEP will remove all
+  named items not listed.
+
+  What do I do if I have the same named item twice on the stack? I think best
+  make that an error.
+
+  So, interpolate will look like this:
+
+  :( y1 y2 pos width -- y ) Interpolate
+    (pos 0.001 <) <r1> // pos -- pos (pos < 0.001?) <r1>
+    (pos width >=) <r2> // pos width -- pos width (pos >= width) <r2>
+    (r1 r2 OR) // r1 r2 -- r1 | r2
+    IF
+      KEEP(y2) // Get rid of everything not y2
+      EXIT
+    ENDIF
+
+    (pos width /) <xpos>
+    DISCARD(pos width)
+    (y2 xpos * 1 xpos - y1 * +) <result>
+    KEEP(result)
+  ;
+
+  Buuut, really, the DISCARD is superfluous. If I know what will be kept, I
+  can automatically discard the rest.
+
+*/
+
+
+
+
+
+// Define the actual shot
+: RunShot
+  1  <y1>
+  11 <y2>
+  3.5  <pos>
+  10 <width>
+  Interpolate
+  DROP
+
+  1  <y1>
+  11 <y2>
+  11.5  <pos>
+  10 <width>
+  Interpolate
+  DROP
+
+
+  STOP            // Tell DE1 to stop
+;
+
+: Idle
+;
+
+: Halt
+;
