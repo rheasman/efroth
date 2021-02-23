@@ -26,9 +26,7 @@
 #Coco/R itself) does not fall under the GNU General Public License.
 #-------------------------------------------------------------------------*/
 
-import array, collections
-import opcodes, ioconsts
-import struct, sys, json
+from frothcompiler import FrothCompiler
 
 
 import sys
@@ -156,263 +154,17 @@ class Parser( object ):
    _string = 5
    _float = 6
    _negfloat = 7
-   maxT = 33
+   maxT = 36
 
    T          = True
    x          = False
    minErrDist = 2
 
-   Opcodes = opcodes.OpCodes()
-   IO = ioconsts.IOConsts()
-   WordCnt = 0
-   Words = collections.OrderedDict()
-   Globals = collections.OrderedDict()
-   GlobalLastAddr = 0
-   WordList = []
-   WordStackUse = {}
-   Labels = {}
-   Addr = 0
-   Fixups = collections.deque()
-   ROM = array.array("B")
-   StackUse = (0,0)
+   def init(self):
+    self.C = FrothCompiler(self)
 
-   # Struct to map ROM address ranges to symbols
-   DebugInfo = {}
-   AddrToSource = {}
-   Tags = {}
-   T_OPCODE = 0
-   T_VAL = 1  
-
-   def updateStackUse(self, maindiff, retdiff):
-     self.StackUse = (self.StackUse[0] + maindiff, self.StackUse[1] + retdiff)
-
-   def emit(self, op, otype, newop, comment=''):
-      print("%5d" % self.Addr, "%6s" % op, "  ", comment)
-      if op in self.Opcodes.OPCODESET:
-        self.updateStackUse(*self.Opcodes.OPCODEDICT[op])
-        self.ROM.append(self.Opcodes.OPCODENUM[op])
-      else:
-        self.ROM.append(op)
-
-      if (op == ';') or (op == 'EXIT'):
-        print("Stack delta:", self.StackUse)
-        self.checkWordStacks()
-        currentword = self.WordList[-1]
-        self.WordStackUse[currentword] = self.StackUse
-
-      self.AddrToSource[int(self.Addr)] = (newop, otype, self.token.pos, self.token.line, self.token.col, self.token.val, self.ROM[-1])
-      self.Addr += 1
-
-   def checkWordStacks(self):
-      currentword = self.WordList[-1]
-      if currentword in self.WordStackUse:
-        # Check that stack use matches at all exits
-        u = self.WordStackUse[currentword]
-        if self.StackUse != u:
-          self.SemErr( f"Stack usage must be the same at all word exits. Previous = {u}, current = {self.StackUse}." )
-
-   def addWord(self, wordstr):
-      if wordstr not in self.Words:
-        self.StackUse = (0,0)
-        self.Words[wordstr] = (self.WordCnt, self.Addr)
-        self.WordList.append(wordstr)
-        print(": %s" % wordstr)
-        self.WordCnt += 1
-        return wordstr
-      else:
-        self.SemErr(f"'{wordstr}' already defined: ")
-
-   def addGlobal(self, gstr):
-     if gstr not in self.Globals:
-       self.Globals[gstr] = self.GlobalLastAddr
-       print("GLOBAL: %s" % gstr)
-       self.GlobalLastAddr += 4
-     else:
-       self.SemErr(f"'{gstr}' already defined: ")       
-
-   def addLabel(self, label):
-     labelname = self.WordList[-1] + '::' + label
-     if labelname in self.Labels:
-       self.SemErr("Label already defined: " + labelname)
-     else:
-       self.Labels[labelname] = self.Addr
-       print("{%s}" % labelname)
-
-   def addTag(self, tag):
-     self.Tags[self.Addr] = tag
-     print("%5d" % self.Addr, "<%s>" % tag)
-
-   def emitWord(self, wordstr, comment=''):
-      if wordstr in self.Opcodes.OPCODESET:
-        # It's an opcode
-        self.emit(wordstr, self.T_OPCODE, 1, comment=comment)
-        return
-      
-      if wordstr in self.IO.IODICT:
-        # It's a defined IO constant
-        self.emitVal(self.IO.IOCONSTVAL[wordstr], comment="// %s: %d" % (wordstr, self.IO.IOCONSTVAL[wordstr]))
-        diffm, diffr = (1, 0)
-
-        return
-
-      if wordstr in self.Words:
-        waddr = self.Words[wordstr][1]
-        self.emitVal(waddr, comment="// %5d %s" % (waddr, wordstr))
-        self.emit("CALL", self.T_OPCODE, 1)
-        #print("Stack use before:", self.StackUse)
-        (m, r) = self.WordStackUse[wordstr]
-        self.StackUse = (self.StackUse[0]+m, self.StackUse[1]+r)
-        #print("Stack use after:", self.StackUse)
-
-        return
-
-      # Maybe it's a label
-      labelname = self.WordList[-1] + '::' + wordstr
-      if labelname in self.Labels:
-        laddr = self.Labels[labelname]
-        self.emitVal(laddr, comment = "// %s" % labelname)
-        return
-
-      # Maybe it's a global
-      if wordstr in self.Globals:
-        val = self.Globals[wordstr]
-        self.emitVal(val, comment = "// %s (%d)" % (wordstr, val))
-        return
-
-      self.SemErr(f"Didn't know what to do with: '{wordstr}'. It's not an opcode, word, known constant, or label." )  
-
-   def floatToBytes(self, floatval):
-     bitpattern = struct.pack("<f", float(floatval))
-     return struct.unpack("BBBB", bitpattern)
-
-   def emitFloat(self, floatval, comment=''):
-      floatval = float(floatval)
-      bytes = self.floatToBytes(floatval)
-      self.emit("IMMF", self.T_OPCODE, 1);
-      self.emit(bytes[0], self.T_VAL, 0, comment = "// %02X (float: %8f)" % (bytes[0], floatval))
-      self.emit(bytes[1], self.T_VAL, 0, comment = "// %02X" % (bytes[1]))
-      self.emit(bytes[2], self.T_VAL, 0, comment = "// %02X" % (bytes[2]))
-      self.emit(bytes[3], self.T_VAL, 0, comment = "// %02X" % (bytes[3]))
-
-   def emitAddr(self, addr, addfixup=False, comment=''):
-      if (addr >=0) and (addr < 65536):
-        # 16 bit unsigned immediate
-        self.emit('IMMU', self.T_OPCODE, 1)
-        if addfixup:
-          self.Fixups.append(self.Addr)
-        self.emit(addr & 0xFF, self.T_VAL, 0,  comment=comment)
-        self.emit((addr >> 8) & 0xFF, self.T_VAL, 0, comment=comment)
-        return
-
-   def fixupAddr(self, addr):
-      d = list(self.AddrToSource[addr])
-      d[-1] = self.ROM[addr]
-      self.AddrToSource[addr] = tuple(d)
-
-   def doFixup(self, tofix, addr):
-      print(f"Fixup {tofix} to {addr}")
-
-      self.ROM[tofix] = addr & 0xFF
-      self.fixupAddr(tofix) 
-
-      self.ROM[tofix+1] = (addr >> 8) & 0xFF
-      self.fixupAddr(tofix) 
-
-
-   def emitVal(self, val, comment=''):
-      val = float(val)
-      intval = int(val)
-      fracval = val % 1
-
-      # It's a float
-      if (fracval != 0):
-        self.emitFloat(val)
-        return
-
-      if (intval >= 0) and (intval < 128):
-        # 7-bit immediate
-        # comment = "// %s %s" % (intval & 0x7F, comment)
-        self.emit(0x80 | intval, self.T_VAL, 1, comment=comment)
-        self.updateStackUse(1,0)
-        return
-
-      if (intval >= -128) and (intval < 128):
-        # 8-bit immediate
-        self.emit('IMMS', self.T_OPCODE, 1)
-        self.emit(intval, self.T_VAL, 0, comment=comment)
-        return
-
-      offset = intval - self.Addr
-      if (offset >= -128) and (offset < 128):
-        # PC-relative number
-        self.emit('PCIMMS', self.T_OPCODE, 1)
-        self.emit(offset, self.T_VAL, 0, comment=comment)
-        return
-
-      if (intval >=0) and (intval < 65536):
-        # 16 bit unsigned immediate
-        self.emit('IMMU', self.T_OPCODE, 1)
-        self.emit(intval & 0xFF, self.T_VAL, 0, comment=comment)
-        self.emit((intval >> 8) & 0xFF, self.T_VAL, 0, comment=comment)
-        return
-
-      # Fine, no efficient way to encode the value
-      self.emitFloat(val, comment=comment)
-
-   def checkWords(self):
-     if "RunShot" not in self.Words:
-       self.SemErr( "The word 'RunShot' must be defined." )
-     if "Idle" not in self.Words:
-       self.SemErr( "The word 'Idle' must be defined." )
-     if "Halt" not in self.Words:
-       self.SemErr( "The word 'Halt' must be defined." )
-
-   def checkPathsEqual(self, p1, p2):
-     if (p1[0] != p2[0]) or (p1[1] != p2[1]):
-       self.SemErr( f"Both paths through a conditional should have the same effect on stack sizes, {p1} vs {p2}" )
-
-   def writeResults(self, inputfile, outputfile):
-      #print(self.AddrToSource)
-      #print(self.Words)
-      debuginfo = {
-        'AddrToSource' : self.AddrToSource,
-        'Words' : self.Words,
-        'Tags' : self.Tags
-      }
-
-      #print("Object code:")
-      #bytes = [format(x, "02X") for x in self.ROM]
-      #print("  ", ",".join(bytes))
-      #print()
-      addr_shot = self.Words['RunShot'][1]
-      addr_idle = self.Words['Idle'][1]
-      addr_halted = self.Words['Halt'][1]
-      with open(outputfile+".bin", "wb") as f:
-        data = struct.pack(f"<4sHHHHHHH{len(self.ROM)}s", b"EFVM", 
-          0,             # Version
-          self.MaxVol,
-          self.MaxSec,
-          0x12,          # Start of ROM
-          addr_shot,
-          addr_idle,
-          addr_halted,
-          self.ROM.tobytes()
-        )
-        f.write(data)
-      
-      with open(inputfile,'r') as infile:
-        debuginfo["Source"] = infile.read()
-
-      with open(outputfile+".debug", 'w') as outfile:
-        json.dump(debuginfo, outfile, indent=2)
-      
-   def startFor(self):
-      self.emitAddr(0, addfixup=True)
-      self.emitWord("FOR")
-
-   def endFor(self, addr):
-      self.emitWord("ENDFOR", comment=f"// FOR at {addr}.")
-      self.doFixup(self.Fixups.pop(), self.Addr)
+   def writeResults(self, filetoparse, filebase):
+    return self.C.writeResults(filetoparse, filebase)
 
 
    def __init__( self ):
@@ -497,17 +249,18 @@ class Parser( object ):
          return self.StartOf( syFol )
 
    def EFroth( self ):
+      self.init() 
       self.Expect(8)
       self.Expect(5)
       self.Expect(9)
       self.Expect(2)
-      self.MaxVol = int(self.token.val) 
+      self.C.MaxVol = int(self.token.val) 
       self.Expect(9)
       self.Expect(2)
-      self.MaxSec = int(self.token.val) 
+      self.C.MaxSec = int(self.token.val) 
       self.Expect(10)
       self.Program()
-      self.checkWords() 
+      self.C.checkWords() 
 
    def Program( self ):
       while self.la.kind == 11:
@@ -520,27 +273,30 @@ class Parser( object ):
    def Global( self ):
       self.Expect(11)
       self.Expect(1)
-      self.addGlobal(self.token.val) 
+      self.C.addGlobal(self.token.val) 
 
    def Word( self ):
       if self.la.kind == 12:
          while not (self.la.kind == 0 or self.la.kind == 12):
-            self.SynErr(34)
+            self.SynErr(37)
             self.Get()
          self.AnnotatedWord()
       elif self.la.kind == 14:
          self.SimpleWord()
       else:
-         self.SynErr(35)
+         self.SynErr(38)
 
    def AnnotatedWord( self ):
       self.Expect(12)
+      self.C.clearStackIds()                      
       while self.la.kind == 1:
          self.Get( )
+         self.C.addStackBeforeId(self.token.val)     
 
       self.ExpectWeak(13, 1)
       while self.la.kind == 1:
          self.Get( )
+         self.C.addStackAfterId(self.token.val) 
 
       self.Expect(10)
       self.RestOfWord()
@@ -551,6 +307,7 @@ class Parser( object ):
 
    def RestOfWord( self ):
       name = self.WordDef()
+      print(f"// {self.C.StackIdList} -- {self.C.StackIdAfterList}") 
       while self.StartOf(2):
          self.CompoundStatement()
 
@@ -558,7 +315,7 @@ class Parser( object ):
 
    def WordDef( self ):
       self.Expect(1)
-      name = self.addWord(self.token.val)        
+      name = self.C.addWord(self.token.val)        
       return name
 
    def CompoundStatement( self ):
@@ -573,45 +330,45 @@ class Parser( object ):
       elif self.StartOf(3):
          self.Statement()
       else:
-         self.SynErr(36)
+         self.SynErr(39)
 
    def EndOfWord( self ):
-      self.emit(";", self.T_OPCODE, 1)           
-      self.Expect(28)
+      self.C.emit(";", self.C.T_OPCODE, 1)           
+      self.Expect(31)
 
    def If( self ):
       self.Expect(15)
-      self.emitAddr(0, addfixup=True)             
-      self.emitWord("BZ")                         
-      stackbeforeif = self.StackUse               
+      self.C.emitAddr(0, addfixup=True)             
+      self.C.emitWord("BZ")                         
+      stackbeforeif = self.C.StackUse               
       while self.StartOf(2):
          self.CompoundStatement()
 
       while self.la.kind == 16:
-         tofix = self.Fixups.pop()                   
-         self.emitAddr(0, addfixup=True)             
-         self.emitWord("BRA")                        
-         stackbeforeelse = self.StackUse             
+         tofix = self.C.Fixups.pop()                   
+         self.C.emitAddr(0, addfixup=True)             
+         self.C.emitWord("BRA")                        
+         stackbeforeelse = self.C.StackUse             
          self.Get( )
-         self.doFixup(tofix, self.Addr);             
-         self.StackUse = stackbeforeif               
+         self.C.doFixup(tofix, self.C.Addr);             
+         self.C.StackUse = stackbeforeif               
          while self.StartOf(2):
             self.CompoundStatement()
 
-         self.checkPathsEqual(stackbeforeelse, self.StackUse) 
+         self.C.checkPathsEqual(stackbeforeelse, self.C.StackUse) 
 
       self.Expect(17)
-      self.doFixup(self.Fixups.pop(), self.Addr)  
-      self.StackUse = stackbeforeif               
+      self.C.doFixup(self.C.Fixups.pop(), self.C.Addr)  
+      self.C.StackUse = stackbeforeif               
 
    def For( self ):
       self.Expect(18)
-      self.startFor(); addr = self.Addr-1         
+      self.C.startFor(); addr = self.C.Addr-1         
       while self.StartOf(2):
          self.CompoundStatement()
 
       self.Expect(19)
-      self.endFor(addr)                           
+      self.C.endFor(addr)                           
 
    def Repeat( self ):
       self.Expect(20)
@@ -632,47 +389,82 @@ class Parser( object ):
          self.WordName()
       elif self.StartOf(4):
          self.Number()
-      elif self.la.kind == 29:
+      elif self.la.kind == 32:
          self.Label()
       elif self.StartOf(5):
          self.MathOp()
-      elif self.la.kind == 31:
+      elif self.la.kind == 34:
          self.Tag()
+      elif self.la.kind == 24:
+         self.StackCopy()
+      elif self.la.kind == 26:
+         self.StackDiscard()
+      elif self.la.kind == 25:
+         self.StackKeep()
       else:
-         self.SynErr(37)
+         self.SynErr(40)
 
    def WordName( self ):
       self.Expect(1)
-      self.emitWord(self.token.val)              
+      self.C.emitWord(self.token.val)              
 
    def Number( self ):
       val = self.IntOrFloat()
-      self.emitVal(val, comment="// %s" % self.token.val) 
+      self.C.emitVal(val, comment="// %s" % self.token.val) 
 
    def Label( self ):
-      self.Expect(29)
+      self.Expect(32)
       self.Expect(1)
-      self.addLabel(self.token.val)              
-      self.Expect(30)
+      self.C.addLabel(self.token.val)              
+      self.Expect(33)
 
    def MathOp( self ):
-      if self.la.kind == 24:
+      if self.la.kind == 27:
          self.Get( )
-      elif self.la.kind == 25:
+      elif self.la.kind == 28:
          self.Get( )
-      elif self.la.kind == 26:
+      elif self.la.kind == 29:
          self.Get( )
-      elif self.la.kind == 27:
+      elif self.la.kind == 30:
          self.Get( )
       else:
-         self.SynErr(38)
-      self.emitWord(self.token.val)              
+         self.SynErr(41)
+      self.C.emitWord(self.token.val)              
 
    def Tag( self ):
-      self.Expect(31)
+      self.Expect(34)
       self.Expect(1)
-      self.addTag(self.token.val)                
-      self.Expect(32)
+      self.C.addTag(self.token.val)                
+      self.Expect(35)
+
+   def StackCopy( self ):
+      self.Expect(24)
+      while self.la.kind == 1 or self.la.kind == 2:
+         if self.la.kind == 2:
+            self.Get( )
+         else:
+            self.Get( )
+            self.C.copyStackId(self.token.val)           
+
+      self.Expect(10)
+
+   def StackDiscard( self ):
+      self.Expect(26)
+      while self.la.kind == 1 or self.la.kind == 2:
+         if self.la.kind == 2:
+            self.Get( )
+         else:
+            self.Get( )
+            self.C.discardStackId(self.token.val)        
+
+      self.Expect(10)
+
+   def StackKeep( self ):
+      self.Expect(25)
+      while self.la.kind == 1:
+         self.Get( )
+
+      self.Expect(10)
 
    def IntOrFloat( self ):
       if self.la.kind == 2:
@@ -691,7 +483,7 @@ class Parser( object ):
          self.Get( )
          val = float(self.token.val)                
       else:
-         self.SynErr(39)
+         self.SynErr(42)
       return val
 
 
@@ -706,12 +498,12 @@ class Parser( object ):
 
 
    set = [
-      [T,x,x,x, x,x,x,x, x,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x],
-      [T,T,x,x, x,x,x,x, x,x,T,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x],
-      [x,T,T,T, T,x,T,T, x,x,x,x, x,x,x,T, x,x,T,x, T,x,T,x, T,T,T,T, x,T,x,T, x,x,x],
-      [x,T,T,T, T,x,T,T, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, T,T,T,T, x,T,x,T, x,x,x],
-      [x,x,T,T, T,x,T,T, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x],
-      [x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, T,T,T,T, x,x,x,x, x,x,x]
+      [T,x,x,x, x,x,x,x, x,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x],
+      [T,T,x,x, x,x,x,x, x,x,T,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x],
+      [x,T,T,T, T,x,T,T, x,x,x,x, x,x,x,T, x,x,T,x, T,x,T,x, T,T,T,T, T,T,T,x, T,x,T,x, x,x],
+      [x,T,T,T, T,x,T,T, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, T,T,T,T, T,T,T,x, T,x,T,x, x,x],
+      [x,x,T,T, T,x,T,T, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x],
+      [x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,T, T,T,T,x, x,x,x,x, x,x]
 
       ]
 
@@ -741,22 +533,25 @@ class Parser( object ):
       21 : "\"ENDREPEAT\" expected",
       22 : "\"WHILE\" expected",
       23 : "\"ENDWHILE\" expected",
-      24 : "\"-\" expected",
-      25 : "\"+\" expected",
-      26 : "\"*\" expected",
-      27 : "\"/\" expected",
-      28 : "\";\" expected",
-      29 : "\"{\" expected",
-      30 : "\"}\" expected",
-      31 : "\"<\" expected",
-      32 : "\">\" expected",
-      33 : "??? expected",
-      34 : "this symbol not expected in Word",
-      35 : "invalid Word",
-      36 : "invalid CompoundStatement",
-      37 : "invalid Statement",
-      38 : "invalid MathOp",
-      39 : "invalid IntOrFloat",
+      24 : "\"COPY(\" expected",
+      25 : "\"KEEP(\" expected",
+      26 : "\"DISCARD(\" expected",
+      27 : "\"-\" expected",
+      28 : "\"+\" expected",
+      29 : "\"*\" expected",
+      30 : "\"/\" expected",
+      31 : "\";\" expected",
+      32 : "\"{\" expected",
+      33 : "\"}\" expected",
+      34 : "\"<\" expected",
+      35 : "\">\" expected",
+      36 : "??? expected",
+      37 : "this symbol not expected in Word",
+      38 : "invalid Word",
+      39 : "invalid CompoundStatement",
+      40 : "invalid Statement",
+      41 : "invalid MathOp",
+      42 : "invalid IntOrFloat",
       }
 
 

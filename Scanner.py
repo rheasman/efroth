@@ -88,17 +88,17 @@ class Scanner(object):
    eofSym  = 0
 
    charSetSize = 256
-   maxT = 33
-   noSym = 33
+   maxT = 36
+   noSym = 36
    start = [
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-     0,  1,  6,  0,  0,  0,  1,  4,  0, 18, 22, 21, 17, 29,  1, 23,
-    14, 13, 13, 13, 13, 13, 13, 13, 13, 13, 31, 24, 27,  0, 28,  0,
-     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-    30,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  1,  0,  1,
+     0,  1,  6,  0,  0,  0,  1,  4,  0, 18, 25, 24, 17, 32,  1, 26,
+    14, 13, 13, 13, 13, 13, 13, 13, 13, 13, 34, 27, 30,  0, 31,  0,
+     1,  1,  1, 35, 37,  1,  1,  1,  1,  1,  1, 36,  1,  1,  1,  1,
+    33,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  1,  0,  1,
      0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 25,  0, 26,  0,  0,
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 28,  0, 29,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -442,13 +442,13 @@ class Scanner(object):
             self.t.kind = 13
             done = True
          elif state == 21:
-            self.t.kind = 25
+            self.t.kind = 24
             done = True
          elif state == 22:
-            self.t.kind = 26
+            self.t.kind = 25
             done = True
          elif state == 23:
-            self.t.kind = 27
+            self.t.kind = 26
             done = True
          elif state == 24:
             self.t.kind = 28
@@ -466,6 +466,15 @@ class Scanner(object):
             self.t.kind = 32
             done = True
          elif state == 29:
+            self.t.kind = 33
+            done = True
+         elif state == 30:
+            self.t.kind = 34
+            done = True
+         elif state == 31:
+            self.t.kind = 35
+            done = True
+         elif state == 32:
             if (self.ch >= '0' and self.ch <= '9'):
                buf += str(self.ch)
                self.NextCh()
@@ -475,9 +484,9 @@ class Scanner(object):
                self.NextCh()
                state = 20
             else:
-               self.t.kind = 24
+               self.t.kind = 27
                done = True
-         elif state == 30:
+         elif state == 33:
             if (self.ch == '!'
                  or self.ch == '&'
                  or self.ch == '.'
@@ -493,13 +502,13 @@ class Scanner(object):
             elif self.ch == 'r':
                buf += str(self.ch)
                self.NextCh()
-               state = 32
+               state = 38
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 31:
+         elif state == 34:
             if self.ch == '(':
                buf += str(self.ch)
                self.NextCh()
@@ -507,7 +516,73 @@ class Scanner(object):
             else:
                self.t.kind = 14
                done = True
-         elif state == 32:
+         elif state == 35:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'N'
+                 or self.ch >= 'P' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'O':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 39
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 36:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'D'
+                 or self.ch >= 'F' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'E':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 40
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 37:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'H'
+                 or self.ch >= 'J' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'I':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 41
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 38:
             if (self.ch == '!'
                  or self.ch == '&'
                  or self.ch == '.'
@@ -523,13 +598,79 @@ class Scanner(object):
             elif self.ch == 'o':
                buf += str(self.ch)
                self.NextCh()
-               state = 33
+               state = 42
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 33:
+         elif state == 39:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'O'
+                 or self.ch >= 'Q' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'P':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 43
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 40:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'D'
+                 or self.ch >= 'F' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'E':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 44
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 41:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'R'
+                 or self.ch >= 'T' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'S':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 45
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 42:
             if (self.ch == '!'
                  or self.ch == '&'
                  or self.ch == '.'
@@ -545,13 +686,79 @@ class Scanner(object):
             elif self.ch == 'g':
                buf += str(self.ch)
                self.NextCh()
-               state = 34
+               state = 46
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 34:
+         elif state == 43:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'X'
+                 or self.ch >= 'Z' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'Y':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 47
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 44:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'O'
+                 or self.ch >= 'Q' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'P':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 48
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 45:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'B'
+                 or self.ch >= 'D' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'C':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 49
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 46:
             if (self.ch == '!'
                  or self.ch == '&'
                  or self.ch == '.'
@@ -567,13 +774,77 @@ class Scanner(object):
             elif self.ch == 'r':
                buf += str(self.ch)
                self.NextCh()
-               state = 35
+               state = 50
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 35:
+         elif state == 47:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == '(':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 21
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 48:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == '(':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 22
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 49:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch == '@'
+                 or self.ch >= 'B' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'A':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 51
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 50:
             if (self.ch == '!'
                  or self.ch == '&'
                  or self.ch == '.'
@@ -588,13 +859,35 @@ class Scanner(object):
             elif self.ch == 'a':
                buf += str(self.ch)
                self.NextCh()
-               state = 36
+               state = 52
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 36:
+         elif state == 51:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'Q'
+                 or self.ch >= 'S' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'R':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 53
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 52:
             if (self.ch == '!'
                  or self.ch == '&'
                  or self.ch == '.'
@@ -610,13 +903,35 @@ class Scanner(object):
             elif self.ch == 'm':
                buf += str(self.ch)
                self.NextCh()
-               state = 37
+               state = 54
             else:
                self.t.kind = 1
                self.t.val = buf
                self.CheckLiteral()
                return self.t
-         elif state == 37:
+         elif state == 53:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= 'C'
+                 or self.ch >= 'E' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == 'D':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 55
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 54:
             if (self.ch == '!'
                  or self.ch == '&'
                  or self.ch == '.'
@@ -632,6 +947,27 @@ class Scanner(object):
                buf += str(self.ch)
                self.NextCh()
                state = 16
+            else:
+               self.t.kind = 1
+               self.t.val = buf
+               self.CheckLiteral()
+               return self.t
+         elif state == 55:
+            if (self.ch == '!'
+                 or self.ch == '&'
+                 or self.ch == '.'
+                 or self.ch >= '0' and self.ch <= '9'
+                 or self.ch >= '@' and self.ch <= '['
+                 or self.ch == ']'
+                 or self.ch == '_'
+                 or self.ch >= 'a' and self.ch <= 'z'):
+               buf += str(self.ch)
+               self.NextCh()
+               state = 1
+            elif self.ch == '(':
+               buf += str(self.ch)
+               self.NextCh()
+               state = 23
             else:
                self.t.kind = 1
                self.t.val = buf

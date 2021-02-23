@@ -125,9 +125,9 @@ DUP    |x -- x x         | Duplicate value on top of stack.
 DROP   |x y -- x         | Discard TOS.
 OVER   |x y -- x y x     | Duplicates the value at TOS-1. (Call twice to duplicate both values)
 SWAP   |x y -- y x       | Swap x and y.
-COPY   |x -- Stack[-x]   | Copy a value out of the stack at position TOS - x, to TOS. 0 is the item before x
-ROT    |a b c -- b c a   | Rotate top 3 values of stack around
-NROT   |a b c -- c a b   | Rotate top 3 values of stack around (the other way)
+COPY   |x -- Stack[-x]   | Copy value(s) out of the stack at position TOS - x. Every 4 bits corresponds to an item.
+ROT    |a b c -- b c a   | Rotate top 3 values of stack around. Move beginning to end.
+NROT   |a b c -- c a b   | Rotate top 3 values of stack around. Move end to beginning.
        |||
 +      |x y -- (x+y)     | Add x and y.
 -      |x y -- (x-y)     | Subtract y from x.
@@ -162,13 +162,13 @@ NOP    |                 | Does nothing.
        |||
 TOR    |x  --            | Pop x and push to Return Stack
 FROMR  |-- x             | Pop from Return Stack and push to ToS
-COPYR  |-- x             | Push a copy of Return Stack ToS to ToS
+COPYR  |a -- x           | Copy value at index [a] on Return Stack to ToS (TODO)
        |||
-PCIMMS |# -- x          | Push PC + # onto the stack.
-IMM    |# -- x          | Push an immediate value from (0..127) onto the stack.
-IMMS   |# -- x          | Push an immediate value from (-127 to 128) onto the stack.
-IMMU   |# -- x          | Push an immediate value from (0 to 65536) onto the stack.
-IMMF   |# -- x          | Push an immediate single-precision float (32-bit) onto the stack.
+PCIMMS |# -- x           | Push PC + # onto the stack.
+IMM    |# -- x           | Push an immediate value from (0..127) onto the stack.
+IMMS   |# -- x           | Push an immediate value from (-127 to 128) onto the stack.
+IMMU   |# -- x           | Push an immediate value from (0 to 65536) onto the stack.
+IMMF   |# -- x           | Push an immediate single-precision float (32-bit) onto the stack.
        |||
 !      |x y -- [y] = x       | Store x at address y.
 @      |y   -- [y]             | Fetch a value from address y, put it on the stack.
@@ -176,8 +176,8 @@ IMMF   |# -- x          | Push an immediate single-precision float (32-bit) onto
 !B     |x y -- [y] = x   | Convert x to a single byte and store it at address y.
 @B     |y -- [y]         | Load a single byte from position y in the packet store.
        |||
-TXP    |-- x           | Send a packet if possible. Return 1 if sent, 0 if dropped.
-RXP?   | -- x           | Return 1 if a packet arrived, else zero. PacketData RX area is not modified until this is called.
+TXP    |-- x             | Send a packet if possible. Return 1 if sent, 0 if dropped.
+RXP?   | -- x            | Return 1 if a packet arrived, else zero. PacketData RX area is not modified until this is called.
        |||
 IOR    |x -- IO[x]       | Read value of type x. (Reads state or sensor)
 IOW    |x y --           | Put value x to control y. (Commands a state or target value)
@@ -216,11 +216,13 @@ the numbers 0 through 128.
 __FOR__ is used to implement the beginning of a FOR loop. {} is used to represent
 the control stack:
 ```
-    FOR limit step index nextblockaddr -- {limit step index}      // Index is inside limits
+    FOR limit step index nextblockaddr
+      -- {limit step index startaddr}      // Index is inside limits
 ```
  or
 ```
-    FOR limit step index nextblockaddr -- ; PC = nextblockaddr    // Index is outside limits
+    FOR limit step index nextblockaddr
+      -- ; PC = nextblockaddr    // Index is outside limits
 ```
 __FOR__ copies the limit, step, and start of the loop variables onto the control
 stack, if the start index is inside the range, otherwise it branches to
@@ -229,19 +231,21 @@ nextblockaddr. Either way, it consumes nextblockaddr.
 __INDEX__ copies the xth index out of the control stack, onto the ToS. 0 is the
 innermost loop index:
 ```
-    INDEX  x {limit1 step1 index1 addr1 limit0 step0 index0 addr1} -- {limit1 step1 index1 addr1 limit0 step0 index0 addr0} index_x
+    INDEX  x {limit1 step1 index1 addr1 limit0 step0 index0 addr1}
+      -- {limit1 step1 index1 addr1 limit0 step0 index0 addr0} index_x
 ```
 __ENDFOR__ is used to implement the end of a __FOR__ loop. It adds the step to the
 index and checks against the limit. If the index is out of range, it removes
 the control information from the stack and goes to the next instruction.
 Otherwise, it branches back to startaddr:
-
-    ENDFOR {limit step index startaddr} -- {limit step index+step startaddr} ; PC = startaddr
-    
+```
+    ENDFOR {limit step index startaddr}
+      -- {limit step index+step startaddr} ; PC = startaddr
+```
  or
- 
+``` 
     ENDFOR {limit step index startaddr} -- {}; PC = PC+1
-
+```
 ### Stacks
 There are two stacks in this virtual CPU. They are the Data Stack and the Control
 Stack. The control stack remembers return addresses when a word is called
