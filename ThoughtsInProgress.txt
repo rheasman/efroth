@@ -232,34 +232,76 @@ What about the first half of interpolate?
   Buuut, really, the DISCARD is superfluous. If I know what will be kept, I
   can automatically discard the rest.
 
-*/
+
+  So I really want a compiler with some kind of liveness tracking for all
+  stack entries. Which means looking ahead to the end of the word.
+
+  So that means deferring the generation of output to the end of the word and
+  then sorting out all opcodes and addresses before finally dumping the
+  opcodes. This is a big change from what I have now.
+
+  Perhaps it's time for a mini-rewrite.
+
+  New game plan:
+    * Write words, values, etc to an intermediate list.
+    * Use placeholders for copy operations out of the stack.
+    * Do no discard stack items unless the user manually uses discards.
+    * At the end of the word, go back and optimize all the copies and discards.
+    * Resolve any addresses.
+    * Dump the word as object code.
+
+  I'll need to have virtual opcodes that then get specialized down to real
+  machine opcodes at the end:
+
+    * Call a word
+    * Branch to an address
+    * Push an immediate value to the stack
+    * Copy item(s) out of the stack
+    * Discard item(s) from the stack
+
+  So that's all shiny, but maybe I should do the same thing for blocks in
+  conditionals, so we end up with more a tree? On the other hand, lists are
+  nice for peephole optimization that crosses a boundary.
+
+  So, the wrinkle now is how to deal with stack liveness and loop iteration.
+
+  An IF .. ELSE .. ENDIF has two blocks. Anything done in one block should be
+  mirrored in the other.
+
+  What about FOR, WHILE, etc?
+
+  Can I do liveness estimation on raw code with branches, or should I do it
+  with higher level blocks? I think blocks will be much easier?
+
+  IF .. ELSE has two paths that need to match in stack length.
+
+  WHILE just needs to make sure that the length of the stack doesn't change
+  within a block.
+
+  FOR is like WHILE.
+
+  In any looped construct, it's not possible to discard a stack id unless that
+  id was introduced in the same block.
+
+  So, liveness rules:
+
+    * No stackid can be discarded in a loop unless it's also created in that block.
+
+    * Any id created inside a block can be discarded in the same block.
+
+    * Any id that is created in one half of an IF must be created in the other
+      half too, at the same stack position.
+
+    * Any id that is discarded in one half of an IF must be discarded in the 
+      other half too, at the same stack position.
+
+    * AKA, stack descriptions should be identical at the end of each IF block.
 
 
+  It sure looks like I should create high level structures, then optimize,
+  then emit final code. That means I end up with a tree instead of a list.
+  Bleh. I don't want this to turn into a monster project.
 
+  Okay. A day of fiddling later, I think the tree is the best way.
 
-
-// Define the actual shot
-: RunShot
-  1  <y1>
-  11 <y2>
-  3.5  <pos>
-  10 <width>
-  Interpolate
-  DROP
-
-  1  <y1>
-  11 <y2>
-  11.5  <pos>
-  10 <width>
-  Interpolate
-  DROP
-
-
-  STOP            // Tell DE1 to stop
-;
-
-: Idle
-;
-
-: Halt
-;
+ */

@@ -26,7 +26,7 @@
 #Coco/R itself) does not fall under the GNU General Public License.
 #-------------------------------------------------------------------------*/
 
-from frothcompiler import FrothCompiler
+from frothcompiler2 import *
 
 
 import sys
@@ -252,13 +252,15 @@ class Parser( object ):
       self.init() 
       self.Expect(8)
       self.Expect(5)
+      name = self.token.val 
       self.Expect(9)
       self.Expect(2)
-      self.C.MaxVol = int(self.token.val) 
+      maxvol = int(self.token.val) 
       self.Expect(9)
       self.Expect(2)
-      self.C.MaxSec = int(self.token.val) 
+      maxsec = int(self.token.val) 
       self.Expect(10)
+      self.C.qHeader(name, maxvol, maxsec) 
       self.Program()
       self.C.checkWords() 
 
@@ -288,30 +290,33 @@ class Parser( object ):
 
    def AnnotatedWord( self ):
       self.Expect(12)
-      self.C.clearStackIds()                      
+      before = []; after = []                     
       while self.la.kind == 1:
          self.Get( )
-         self.C.addStackBeforeId(self.token.val)     
+         before.append(self.token.val)               
 
       self.ExpectWeak(13, 1)
       while self.la.kind == 1:
          self.Get( )
-         self.C.addStackAfterId(self.token.val) 
+         after.append(self.token.val)                
 
       self.Expect(10)
-      self.RestOfWord()
+      ids = [before, after]                       
+      self.RestOfWord(ids)
 
    def SimpleWord( self ):
       self.Expect(14)
-      self.RestOfWord()
+      ids = [[], []]                              
+      self.RestOfWord(ids)
 
-   def RestOfWord( self ):
+   def RestOfWord( self, stackids ):
       name = self.WordDef()
-      print(f"// {self.C.StackIdList} -- {self.C.StackIdAfterList}") 
+      print(f"// {name} : {stackids[0]} -- {stackids[1]}") 
       while self.StartOf(2):
          self.CompoundStatement()
 
       self.EndOfWord()
+      self.C.registerWord(name, stackids)         
 
    def WordDef( self ):
       self.Expect(1)
@@ -333,32 +338,31 @@ class Parser( object ):
          self.SynErr(39)
 
    def EndOfWord( self ):
-      self.C.emit(";", self.C.T_OPCODE, 1)           
+      self.C.qWord(";"); self.C.showWord()         
       self.Expect(31)
 
    def If( self ):
       self.Expect(15)
-      self.C.emitAddr(0, addfixup=True)             
-      self.C.emitWord("BZ")                         
+      ifhandle = self.C.qBranch("BZ"); noelse=True  
       stackbeforeif = self.C.StackUse               
       while self.StartOf(2):
          self.CompoundStatement()
 
       while self.la.kind == 16:
-         tofix = self.C.Fixups.pop()                   
-         self.C.emitAddr(0, addfixup=True)             
-         self.C.emitWord("BRA")                        
+         elsehandle = self.C.qBranch("BRA")            
          stackbeforeelse = self.C.StackUse             
          self.Get( )
-         self.C.doFixup(tofix, self.C.Addr);             
+         noelse = False                                
+         self.C.setBranchTargetToHere(ifhandle)        
          self.C.StackUse = stackbeforeif               
          while self.StartOf(2):
             self.CompoundStatement()
 
          self.C.checkPathsEqual(stackbeforeelse, self.C.StackUse) 
+         self.C.setBranchTargetToHere(elsehandle)      
 
       self.Expect(17)
-      self.C.doFixup(self.C.Fixups.pop(), self.C.Addr)  
+      if noelse: self.C.setBranchTargetToHere(ifhandle) 
       self.C.StackUse = stackbeforeif               
 
    def For( self ):
@@ -406,11 +410,11 @@ class Parser( object ):
 
    def WordName( self ):
       self.Expect(1)
-      self.C.emitWord(self.token.val)              
+      self.C.qWord(self.token.val)                 
 
    def Number( self ):
       val = self.IntOrFloat()
-      self.C.emitVal(val, comment="// %s" % self.token.val) 
+      self.C.qVal(val, comment="%s" % self.token.val) 
 
    def Label( self ):
       self.Expect(32)
@@ -429,7 +433,7 @@ class Parser( object ):
          self.Get( )
       else:
          self.SynErr(41)
-      self.C.emitWord(self.token.val)              
+      self.C.qWord(self.token.val)                 
 
    def Tag( self ):
       self.Expect(34)
@@ -439,23 +443,17 @@ class Parser( object ):
 
    def StackCopy( self ):
       self.Expect(24)
-      while self.la.kind == 1 or self.la.kind == 2:
-         if self.la.kind == 2:
-            self.Get( )
-         else:
-            self.Get( )
-            self.C.copyStackId(self.token.val)           
+      while self.la.kind == 1:
+         self.Get( )
+         self.C.qCopy(self.token.val)                 
 
       self.Expect(10)
 
    def StackDiscard( self ):
       self.Expect(26)
-      while self.la.kind == 1 or self.la.kind == 2:
-         if self.la.kind == 2:
-            self.Get( )
-         else:
-            self.Get( )
-            self.C.discardStackId(self.token.val)        
+      while self.la.kind == 1:
+         self.Get( )
+         self.C.qDiscard(self.token.val)              
 
       self.Expect(10)
 

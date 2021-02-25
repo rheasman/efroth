@@ -1,6 +1,6 @@
 import collections
 
-OpcodeInfo = collections.namedtuple("OpcodeInfo", "mbefore mafter rbefore rafter special")
+StackInfo = collections.namedtuple("StackInfo", "mbefore mafter rbefore rafter special")
 class OpCodes:
   OPCODEDICT = {
     
@@ -10,69 +10,69 @@ class OpCodes:
     # handling. Special will be a unique integer in case I need to index
     # different special cases.
 
-    "DUP"    : OpcodeInfo('a',      'a a',    '',       '', 0),  
-    "DROP"   : OpcodeInfo('a',      '',       '',       '', 0),
-    "OVER"   : OpcodeInfo('a b',    'a b a',  '',       '', 0),
-    "SWAP"   : OpcodeInfo('a b',    'b a',    '',       '', 0),  
-    "COPY"   : OpcodeInfo('',       '',       '',       '', 1),  # Copy has a variable effect on the stack, so mark it special
-    "ROT"    : OpcodeInfo('a b c',  'b c a',  '',       '', 0),  # Front goes to back
-    "NROT"   : OpcodeInfo('a b c',  'c a b',  '',       '', 0),  # Back goes to front
-    "+"      : OpcodeInfo('a b',    'c',      '',       '', 0),
-    "-"      : OpcodeInfo('a b',    'c',      '',       '', 0),
-    "*"      : OpcodeInfo('a b',    'c',      '',       '', 0),
-    "/"      : OpcodeInfo('a b',    'c',      '',       '', 0),
-    "POW"    : OpcodeInfo('a b',    'c',      '',       '', 0),
-    "NEG"    : OpcodeInfo('a',      'b',      '',       '', 0),
-    "REC"    : OpcodeInfo('a',      'b',      '',       '', 0),
-    "TZ"     : OpcodeInfo('a',      'b',      '',       '', 0),
-    "TGT"    : OpcodeInfo('a',      'b',      '',       '', 0),
-    "TLT"    : OpcodeInfo('a',      'b',      '',       '', 0),
-    "TGE"    : OpcodeInfo('a',      'b',      '',       '', 0),
-    "TLE"    : OpcodeInfo('a',      'b',      '',       '', 0),
-    "TIN"    : OpcodeInfo('a',      'b',      '',       '', 0),
-    "OR"     : OpcodeInfo('a b',    'c',      '',       '', 0),
-    "AND"    : OpcodeInfo('a b',    'c',      '',       '', 0),
-    "XOR"    : OpcodeInfo('a b',    'c',      '',       '', 0),
-    "BINV"   : OpcodeInfo('a',      'b',      '',       '', 0),
-    "BNZ"    : OpcodeInfo('a b',     '',      '',       '', 0),
-    "BZ"     : OpcodeInfo('a b',     '',      '',       '', 0),
-    "BRA"    : OpcodeInfo('a',      '',       '',       '', 0),
-    "CALL"   : OpcodeInfo('a',      '',       '',      'a', 0),
-    ";"      : OpcodeInfo('',       '',       'a',      '', 0),
-    "EXIT"   : OpcodeInfo('',       '',       'a',      '', 0),
-    "WAIT"   : OpcodeInfo('',       '',       '',       '', 0),
-    "NOP"    : OpcodeInfo('',       '',       '',       '', 0),
-    "TOR"    : OpcodeInfo('a',      '',       '',      'a', 0),
-    "FROMR"  : OpcodeInfo('',       'a',      'a',      '', 0),
-    "COPYR"  : OpcodeInfo('',       'a',      'a',      '', 0),
-    "PCIMMS" : OpcodeInfo('',       'a',      '',       '', 0),
-    "IMM"    : OpcodeInfo('',       'a',      '',       '', 0),
-    "IMMS"   : OpcodeInfo('',       'a',      '',       '', 0),
-    "IMMU"   : OpcodeInfo('',       'a',      '',       '', 0),
-    "IMMF"   : OpcodeInfo('',       'a',      '',       '', 0),
-    "!"      : OpcodeInfo('a b',    '',       '',       '', 0),
-    "@"      : OpcodeInfo('a',      'b',      '',       '', 0),
-    "!B"     : OpcodeInfo('a b',    '',       '',       '', 0),
-    "@B"     : OpcodeInfo('a',      'b',      '',       '', 0),
-    "TXP"    : OpcodeInfo('',       'a',      '',       '', 0),
-    "RXP?"   : OpcodeInfo('',       'a',      '',       '', 0),
+    "DUP"    : StackInfo('a',      'a a',    '',       '', 0),  
+    "DROP"   : StackInfo('a',      '',       '',       '', 0),
+    "OVER"   : StackInfo('a b',    'a b a',  '',       '', 0),
+    "SWAP"   : StackInfo('a b',    'b a',    '',       '', 0),  
+    "COPY"   : StackInfo('',       '',       '',       '', 1),  # Copy has a variable effect on the stack, so mark it special
+    "ROT"    : StackInfo('a b c',  'b c a',  '',       '', 0),  # Front goes to back
+    "NROT"   : StackInfo('a b c',  'c a b',  '',       '', 0),  # Back goes to front
+    "+"      : StackInfo('a b',    'c',      '',       '', 0),
+    "-"      : StackInfo('a b',    'c',      '',       '', 0),
+    "*"      : StackInfo('a b',    'c',      '',       '', 0),
+    "/"      : StackInfo('a b',    'c',      '',       '', 0),
+    "POW"    : StackInfo('a b',    'c',      '',       '', 0),
+    "NEG"    : StackInfo('a',      'b',      '',       '', 0),
+    "REC"    : StackInfo('a',      'b',      '',       '', 0),
+    "TZ"     : StackInfo('a',      'b',      '',       '', 0),
+    "TGT"    : StackInfo('a',      'b',      '',       '', 0),
+    "TLT"    : StackInfo('a',      'b',      '',       '', 0),
+    "TGE"    : StackInfo('a',      'b',      '',       '', 0),
+    "TLE"    : StackInfo('a',      'b',      '',       '', 0),
+    "TIN"    : StackInfo('a',      'b',      '',       '', 0),
+    "OR"     : StackInfo('a b',    'c',      '',       '', 0),
+    "AND"    : StackInfo('a b',    'c',      '',       '', 0),
+    "XOR"    : StackInfo('a b',    'c',      '',       '', 0),
+    "BINV"   : StackInfo('a',      'b',      '',       '', 0),
+    "BNZ"    : StackInfo('a b',     '',      '',       '', 0),
+    "BZ"     : StackInfo('a b',     '',      '',       '', 0),
+    "BRA"    : StackInfo('a',      '',       '',       '', 0),
+    "CALL"   : StackInfo('a',      '',       '',      'a', 0),
+    ";"      : StackInfo('',       '',       'a',      '', 0),
+    "EXIT"   : StackInfo('',       '',       'a',      '', 0),
+    "WAIT"   : StackInfo('',       '',       '',       '', 0),
+    "NOP"    : StackInfo('',       '',       '',       '', 0),
+    "TOR"    : StackInfo('a',      '',       '',      'a', 0),
+    "FROMR"  : StackInfo('',       'a',      'a',      '', 0),
+    "COPYR"  : StackInfo('',       'a',      'a',      '', 0),
+    "PCIMMS" : StackInfo('',       'a',      '',       '', 0),
+    "IMM"    : StackInfo('',       'a',      '',       '', 0),
+    "IMMS"   : StackInfo('',       'a',      '',       '', 0),
+    "IMMU"   : StackInfo('',       'a',      '',       '', 0),
+    "IMMF"   : StackInfo('',       'a',      '',       '', 0),
+    "!"      : StackInfo('a b',    '',       '',       '', 0),
+    "@"      : StackInfo('a',      'b',      '',       '', 0),
+    "!B"     : StackInfo('a b',    '',       '',       '', 0),
+    "@B"     : StackInfo('a',      'b',      '',       '', 0),
+    "TXP"    : StackInfo('',       'a',      '',       '', 0),
+    "RXP?"   : StackInfo('',       'a',      '',       '', 0),
 
-    "IOR"    : OpcodeInfo('a',      'b',      '',       '', 0),
-    "IOW"    : OpcodeInfo('a b',    '',       '',       '', 0),
-    "IORT"   : OpcodeInfo('a',      'b',      '',       '', 0),
+    "IOR"    : StackInfo('a',      'b',      '',       '', 0),
+    "IOW"    : StackInfo('a b',    '',       '',       '', 0),
+    "IORT"   : StackInfo('a',      'b',      '',       '', 0),
 
-    "FOR"    : OpcodeInfo('a b c d','',       '','a b c e', 0),
+    "FOR"    : StackInfo('a b c d','',       '','a b c e', 0),
     
     # ENDFOR is special. If you get past it, it removes things from the return
     # stack. If it branches back, it doesn't. So, ignore the branch back
     # phase. FOR and ENDFOR make a single opcode that has predictable
     # behaviour on the stack once both have been executed.
     
-    "ENDFOR" : OpcodeInfo('',       '',       'a b c d','', 0),
+    "ENDFOR" : StackInfo('',       '',       'a b c d','', 0),
 
 
-    "STOP"   : OpcodeInfo('',       '',       '',       '', 0),
-    "INDEX"  : OpcodeInfo('',       'a',      '',       '', 2)  # Another special case
+    "STOP"   : StackInfo('',       '',       '',       '', 0),
+    "INDEX"  : StackInfo('',       'a',      '',       '', 2)  # Another special case
   }
 
   OPCODELIST = [x for x in OPCODEDICT.keys()]

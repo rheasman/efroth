@@ -2,6 +2,12 @@ import array, collections
 import opcodes, ioconsts
 import struct, sys, json
 
+T_Call    = collections.namedtuple('T_Call', 'wordname')
+T_Bra     = collections.namedtuple('T_Bra', 'opcode targetlabel')
+T_Imm     = collections.namedtuple('T_Imm', 'value')
+T_Copy    = collections.namedtuple('T_Copy', 'poslist')
+T_Discard = collections.namedtuple('T_Discard', 'posmask')
+
 class FrothCompiler:      
   Opcodes = opcodes.OpCodes()
   IO = ioconsts.IOConsts()
@@ -27,6 +33,7 @@ class FrothCompiler:
   Tags = {}
   T_OPCODE = 0
   T_VAL = 1  
+  OPTYPES = ['call', 'branch', 'imm', 'copy', 'discard']
 
 
   def __init__(self, cocoparent):

@@ -92,7 +92,7 @@ float interpolate(float width, float position, float y1, float y2) {
     SWAP DROP  // -- y2
     EXIT
   ENDIF
-
+  
   // This is the actual interpolation
                // -- y1 y2 pos width
   / <xpos>     // -- y1 y2 xpos
@@ -122,6 +122,12 @@ float interpolate(float width, float position, float y1, float y2) {
 ;
 
 */
+
+// Simple test for our stack tracking
+:( a b -- b a ) Swap
+  SWAP
+;
+
 // Define the actual shot
 : RunShot
   1  <y1>

@@ -58,13 +58,13 @@ PRODUCTIONS
                           WEAK "--" 
                           { identifier            (. self.C.addStackAfterId(self.token.val) .)
                           } 
-                          ")"
+                          ")"                     
                           RestOfWord 
                           .
-  SimpleWord           = ":"
+  SimpleWord           = ":"                      (. self.C.clearStackIds()                      .)
                           RestOfWord
                           .
-  RestOfWord           = WordDef<out name>        (. print(f"// {self.C.StackIdList} -- {self.C.StackIdAfterList}") .)
+  RestOfWord           = WordDef<out name>        (. print(f"// {name} : {self.C.StackIdList} -- {self.C.StackIdAfterList}") .)
                           { CompoundStatement }
                           EndOfWord
                           .
