@@ -129,7 +129,7 @@ SWAP   |x y -- y x       | Swap x and y.
 COPY   |x -- Stack[-x]   | Copy value(s) out of the stack at position TOS - x. Every 4 bits corresponds to an item.
 ROT    |a b c -- b c a   | Rotate top 3 values of stack around. Move beginning to end.
 NROT   |a b c -- c a b   | Rotate top 3 values of stack around. Move end to beginning.
-       |                 |
+.      |.                |.
 +      |x y -- (x+y)     | Add x and y.
 -      |x y -- (x-y)     | Subtract y from x.
 *      |x y -- (x*y)     | Multiply x and y.
