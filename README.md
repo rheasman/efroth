@@ -1,8 +1,6 @@
-              **FROTH, a computer language to make espresso**
-
-=FROTH a computer language to make espresso
-
-==This is a work in progress, and no releases have been made yet
+FROTH a computer language to make espresso
+=
+**This is a work in progress, and no releases have been made yet**
 
 This is a super simple stack machine that makes espresso. Optimized so that it
 can be implemented on the DE1 while using around 3 kB of RAM.
@@ -129,57 +127,57 @@ SWAP   |x y -- y x       | Swap x and y.
 COPY   |x -- Stack[-x]   | Copy value(s) out of the stack at position TOS - x. Every 4 bits corresponds to an item.
 ROT    |a b c -- b c a   | Rotate top 3 values of stack around. Move beginning to end.
 NROT   |a b c -- c a b   | Rotate top 3 values of stack around. Move end to beginning.
-.      |.                |.
-+      |x y -- (x+y)     | Add x and y.
--      |x y -- (x-y)     | Subtract y from x.
-*      |x y -- (x*y)     | Multiply x and y.
-/      |x y -- (x/y)     | Divide x by y.
-       |                 |
+ | | 	
+\+      |x y -- (x+y)     | Add x and y.
+\-      |x y -- (x-y)     | Subtract y from x.
+\*      |x y -- (x*y)     | Multiply x and y.
+\/      |x y -- (x/y)     | Divide x by y.
+ | | 	
 POW    |x y -- pow(x,y)  | Take x to the power of y.
 NEG    |x -- (-x)        | Invert sign of TOS.
 REC    |x -- (1/x)       | Reciprocal of TOS.
-       |                 |
+ | | 	
 TZ     |x -- (1 or 0)    | Test Zero.  TOS = 1 if x  = 0, else 0
 TGT    |x y -- (x&gt;y)     | Test Greater Than.  TOS = 1 if x  &gt; y, else 0
 TLT    |x y -- (x&lt;y)     | Test Less Than. TOS = 1 if x  &lt; y, else 0
 TGE    |x y -- (x&gt;=y)    | Test Greater or Equal.  TOS = 1 if x &gt;= y, else 0
 TLE    |x y -- (x&lt;=y)    | Test Less or Equal. TOS = 1 if x &lt;= y, else 0
 TIN    |x -- (1 or 0)    | Test Invalid Number. TOS = 1 if x is NaN or Inf
-       |                 |
+ | | 	
 OR     |x y -- (x  OR y) | Bitwise integer OR. Note that a FLOAT32 can only represent up to 24-bit integers exactly.
 AND    |x y -- (x AND y) | Bitwise integer AND
 XOR    |x y -- (x XOR y) | Bitwise integer XOR
 BINV   |x   -- (~x)      | Bitwise Inverse. x is rounded to the nearest integer before the operation
-       |                 |
+ | | 	
 BNZ    |x a --           | Branch to a if x != 0.
 BZ     |x a --           | Branch to a if x == 0.
 BRA    |a   --           | Branch to a.
-       |                 |
+ | | 	
 CALL   |x                | Execute word x.
 ;      |                 | Returns to calling word. Use at end of word only.
 EXIT   |                 | Returns to calling word. Use in middle of words, only.
 WAIT   |                 | Sleep until the start of the next AC cycle.
 NOP    |                 | Does nothing.
-       |                 |
+ | | 	
 TOR    |x  --            | Pop x and push to Return Stack
 FROMR  |-- x             | Pop from Return Stack and push to ToS
 COPYR  |a -- x           | Copy value at index [a] on Return Stack to ToS (TODO)
-       |                 |
+ | | 	
 PCIMMS |# -- x           | Push PC + # onto the stack.
 IMM    |# -- x           | Push an immediate value from (0..127) onto the stack.
 IMMS   |# -- x           | Push an immediate value from (-127 to 128) onto the stack.
 IMMU   |# -- x           | Push an immediate value from (0 to 65536) onto the stack.
 IMMF   |# -- x           | Push an immediate single-precision float (32-bit) onto the stack.
-       |                 |
+ | | 	
 !      |x y -- [y] = x       | Store x at address y.
 @      |y   -- [y]             | Fetch a value from address y, put it on the stack.
-       |                 |
+ | | 	
 !B     |x y -- [y] = x   | Convert x to a single byte and store it at address y.
 @B     |y -- [y]         | Load a single byte from position y in the packet store.
-       |                 |
+ | | 	
 TXP    |-- x             | Send a packet if possible. Return 1 if sent, 0 if dropped.
 RXP?   | -- x            | Return 1 if a packet arrived, else zero. PacketData RX area is not modified until this is called.
-       |                 |
+ | | 	
 IOR    |x -- IO[x]       | Read value of type x. (Reads state or sensor)
 IOW    |x y --           | Put value x to control y. (Commands a state or target value)
 IORT   |x -- LastIO[x]   | Read last value written to y. (Reads back what the machine actually accepted)
