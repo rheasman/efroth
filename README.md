@@ -5,7 +5,7 @@ FROTH a computer language to make espresso
 **This is an example screenshot of the debugger IDE:**
 ![](./dalgona.png)
 This is a super simple stack machine that makes espresso. Optimized so that it
-can be implemented on the DE1 while using around 3 kB of RAM.
+can be implemented on the Decent Espresso DE1 while using around 3 kB of RAM.
 
 This is similar in some ways to the FORTH language, but not the same, so I'm
 calling it the "FROTH" language.
