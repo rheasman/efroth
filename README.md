@@ -2,6 +2,8 @@ FROTH a computer language to make espresso
 =
 **This is a work in progress, and no releases have been made yet**
 
+**This is an example screenshot of the debugger IDE:**
+![](./dalgona.png)
 This is a super simple stack machine that makes espresso. Optimized so that it
 can be implemented on the DE1 while using around 3 kB of RAM.
 
@@ -526,9 +528,4 @@ xxxx - xxxx | Length of program ROM in bytes.
 These are things I am working on.
 
   * Move all store and fetch operations to the same memory space.
-
-<!-- Markdeep: -->
-<style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
-<script src="markdeep.min.js" charset="utf-8"></script>
-<script src="https://morgan3d.github.io/markdeep/latest/markdeep.min.js" charset="utf-8"></script>
-<script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>
+  * DearPyGUI has made API-breaking changes moving from 0.6 to 0.7. Rewrite debugger to use it.
