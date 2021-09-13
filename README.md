@@ -1,4 +1,4 @@
-FROTH a computer language to make espresso
+FROTH, a computer language to make espresso
 =
 **This is a work in progress, and no releases have been made yet**
 
